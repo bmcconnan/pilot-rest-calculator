@@ -1,0 +1,19 @@
+{
+  "name": "Pilot Rest Calculator",
+  "short_name": "Pilot Rest",
+  "description": "Calculate crew rest periods and share a PDF schedule.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f6f8f6",
+  "theme_color": "#174a4f",
+  "icons": [
+    {
+      "src": "./icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
+

@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#101214" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="Pilot Rest" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <link rel="stylesheet" href="./styles.css?v=20260624-7" />
+    <title>Pilot Rest Calculator</title>
+  </head>
+  <body>
+    <main class="app-shell">
+      <section class="header-band">
+        <div>
+          <p class="eyebrow">Crew rest planning</p>
+          <h1>Pilot Rest Calculator</h1>
+        </div>
+        <div class="status-pill" id="installStatus">Offline ready</div>
+      </section>
+
+      <section class="workspace-grid">
+        <form class="input-panel" id="calculatorForm">
+          <div class="panel-heading">
+            <h2>Inputs</h2>
+            <button class="reset-button" type="button" id="resetButton" title="RESET ALL" aria-label="RESET ALL">
+              RESET ALL
+            </button>
+          </div>
+
+          <div class="segmented-field">
+            <span>Burn time</span>
+            <div class="duration-picker" aria-label="Burn time">
+              <label>
+                <span>Hours</span>
+                <select id="burnHours" aria-label="Burn hours"></select>
+              </label>
+              <label>
+                <span>Minutes</span>
+                <select id="burnMinutes" aria-label="Burn minutes"></select>
+              </label>
+            </div>
+          </div>
+
+          <div class="segmented-field">
+            <span>Number of crew</span>
+            <div class="segmented-control" role="radiogroup" aria-label="Number of crew">
+              <label>
+                <input type="radio" name="crewCount" value="3" checked />
+                <span>3</span>
+              </label>
+              <label>
+                <input type="radio" name="crewCount" value="4" />
+                <span>4</span>
+              </label>
+            </div>
+          </div>
+
+          <div class="segmented-field">
+            <span>Breaks per pilot</span>
+            <div class="segmented-control" role="radiogroup" aria-label="Breaks per pilot">
+              <label>
+                <input type="radio" name="breaksPerPilot" value="1" checked />
+                <span>1</span>
+              </label>
+              <label>
+                <input type="radio" name="breaksPerPilot" value="2" />
+                <span>2</span>
+              </label>
+            </div>
+          </div>
+
+          <div class="inline-field-row">
+            <label>
+              <span>Manual rest override</span>
+              <input id="manualOverride" type="text" inputmode="numeric" placeholder="HH:MM optional" />
+            </label>
+
+            <label>
+              <span>Alarm offset minutes</span>
+              <input id="alarmOffset" type="number" value="-15" step="1" />
+            </label>
+          </div>
+
+          <div class="segmented-field">
+            <span>Start time UTC</span>
+            <div class="duration-picker" aria-label="Start time UTC">
+              <label>
+                <span>Hours</span>
+                <select id="startHours" aria-label="Start hours"></select>
+              </label>
+              <label>
+                <span>Minutes</span>
+                <select id="startMinutes" aria-label="Start minutes"></select>
+              </label>
+            </div>
+          </div>
+        </form>
+
+        <section class="summary-panel" aria-live="polite">
+          <div class="metric-strip">
+            <div>
+              <span>Usable rest</span>
+              <strong id="usableRest">--:--</strong>
+            </div>
+            <div>
+              <span>Total per pilot</span>
+              <strong id="totalPerPilot">--:--</strong>
+            </div>
+            <div>
+              <span>Rest period</span>
+              <strong id="periodUsed">--:--</strong>
+            </div>
+            <div>
+              <span>Slots</span>
+              <strong id="slotCount">0</strong>
+            </div>
+          </div>
+
+          <div class="device-check">
+            <div class="panel-heading">
+              <h2>Device Time</h2>
+            </div>
+            <div class="device-grid">
+              <div class="time-readout">
+                <span>Device clock</span>
+                <strong id="deviceClock">--:--</strong>
+              </div>
+              <div class="time-readout">
+                <span>Current UTC</span>
+                <strong id="currentUtc">--:--</strong>
+              </div>
+              <div class="time-readout">
+                <span>Device UTC offset</span>
+                <strong id="deviceOffset">--:--</strong>
+              </div>
+            </div>
+            <p class="check-message" id="deviceMessage"></p>
+          </div>
+        </section>
+      </section>
+
+      <section class="schedule-section">
+        <div class="table-toolbar">
+          <div>
+            <h2>Rest Schedule</h2>
+            <p id="scheduleContext"></p>
+          </div>
+          <div class="action-row">
+            <button type="button" id="copyButton">Copy</button>
+            <button type="button" id="downloadButton">Download PDF</button>
+            <button type="button" id="shareButton" class="primary-button">Share PDF</button>
+          </div>
+        </div>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Break</th>
+                <th>Rest Start UTC</th>
+                <th>Rest End UTC</th>
+                <th>Device Alarm</th>
+                <th>Duration</th>
+              </tr>
+            </thead>
+            <tbody id="scheduleBody"></tbody>
+          </table>
+        </div>
+
+        <p class="share-status" id="shareStatus" role="status"></p>
+      </section>
+    </main>
+
+    <script src="./app.js?v=20260624-7" defer></script>
+  </body>
+</html>
