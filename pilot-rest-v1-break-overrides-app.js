@@ -1,6 +1,7 @@
 "use strict";
 
 const MINUTES_PER_DAY = 1440;
+const SHARED_SCHEDULE_VERSION = 1;
 const INITIAL_DEFAULTS = {
   startHours: 12,
   startMinutes: 55,
@@ -51,6 +52,7 @@ const els = {
   shareStatus: document.querySelector("#shareStatus"),
   installStatus: document.querySelector("#installStatus"),
   copyButton: document.querySelector("#copyButton"),
+  shareAppButton: document.querySelector("#shareAppButton"),
   downloadButton: document.querySelector("#downloadButton"),
   shareButton: document.querySelector("#shareButton"),
   resetButton: document.querySelector("#resetButton"),
@@ -58,6 +60,7 @@ const els = {
 };
 
 let latestResult = null;
+let activeFlightDate = todayUtcIsoDate();
 
 init();
 
@@ -66,9 +69,13 @@ function init() {
   populateDurationPickers();
   populateAlarmOffsetPicker();
   hydrateDefaults(INITIAL_DEFAULTS);
+  const importedSchedule = importSharedSchedule();
   bindEvents();
   registerServiceWorker();
   render();
+  if (importedSchedule) {
+    setStatus("Shared schedule imported. Adjust Alarm Offset for this device.");
+  }
   setInterval(updateDeviceClock, 15000);
 }
 
@@ -128,6 +135,7 @@ function bindEvents() {
   els.alarmOffset.addEventListener("input", render);
   els.alarmOffset.addEventListener("change", render);
   els.copyButton.addEventListener("click", copySchedule);
+  els.shareAppButton.addEventListener("click", shareAppSchedule);
   els.downloadButton.addEventListener("click", downloadPdf);
   els.shareButton.addEventListener("click", sharePdf);
   els.startNowButton.addEventListener("click", () => {
@@ -135,6 +143,7 @@ function bindEvents() {
     render();
   });
   els.resetButton.addEventListener("click", () => {
+    activeFlightDate = todayUtcIsoDate();
     hydrateDefaults(RESET_DEFAULTS);
     render();
   });
@@ -175,7 +184,7 @@ function readInputs() {
   );
 
   return {
-    flightDate: todayUtcIsoDate(),
+    flightDate: activeFlightDate,
     startMinutes: startHours * 60 + startMinutesPart,
     burnMinutes: burnHours * 60 + burnMinutesPart,
     crewCount: Number(getRadioValue("crewCount")),
@@ -350,6 +359,140 @@ async function copySchedule() {
   } catch {
     setStatus("Copy is unavailable in this browser.");
   }
+}
+
+async function shareAppSchedule() {
+  if (!latestResult) {
+    return;
+  }
+
+  const url = buildSharedScheduleUrl(latestResult.inputs);
+  const shareData = {
+    title: "Pilot Rest Schedule",
+    text: "Open this link to import the rest schedule into Pilot Rest Calculator.",
+    url
+  };
+
+  if (navigator.share) {
+    try {
+      await navigator.share(shareData);
+      setStatus("Share sheet opened. Choose AirDrop to send the app schedule.");
+      return;
+    } catch (error) {
+      if (error?.name === "AbortError") {
+        return;
+      }
+    }
+  }
+
+  try {
+    await navigator.clipboard.writeText(url);
+    setStatus("App schedule link copied.");
+  } catch {
+    setStatus("App schedule sharing is unavailable in this browser.");
+  }
+}
+
+function buildSharedScheduleUrl(inputs) {
+  const payload = {
+    v: SHARED_SCHEDULE_VERSION,
+    d: inputs.flightDate,
+    s: inputs.startMinutes,
+    b: inputs.burnMinutes,
+    c: inputs.crewCount,
+    n: inputs.breaksPerPilot,
+    o1: inputs.firstOverrideMinutes,
+    o2: inputs.secondOverrideMinutes
+  };
+  const url = new URL(window.location.href);
+  url.search = "";
+  url.hash = "";
+  url.searchParams.set("schedule", encodeSharedPayload(payload));
+  return url.toString();
+}
+
+function importSharedSchedule() {
+  const encodedPayload = new URLSearchParams(window.location.search).get("schedule");
+  if (!encodedPayload) {
+    return false;
+  }
+
+  try {
+    const payload = decodeSharedPayload(encodedPayload);
+    if (!isValidSharedPayload(payload)) {
+      throw new Error("Invalid shared schedule");
+    }
+
+    activeFlightDate = payload.d;
+    els.startHours.value = String(Math.floor(payload.s / 60));
+    els.startMinutes.value = String(payload.s % 60);
+    els.burnHours.value = String(Math.floor(payload.b / 60));
+    els.burnMinutes.value = String(payload.b % 60);
+    setRadioValue("crewCount", payload.c);
+    setRadioValue("breaksPerPilot", payload.n);
+    setOverridePicker(
+      els.firstOverrideEnabled,
+      els.firstOverrideHours,
+      els.firstOverrideMinutes,
+      payload.o1
+    );
+    setOverridePicker(
+      els.secondOverrideEnabled,
+      els.secondOverrideHours,
+      els.secondOverrideMinutes,
+      payload.o2
+    );
+    updateSecondOverrideVisibility(payload.n);
+    return true;
+  } catch {
+    window.setTimeout(() => setStatus("This shared schedule link is invalid or incomplete."), 0);
+    return false;
+  }
+}
+
+function setOverridePicker(enabledElement, hoursElement, minutesElement, totalMinutes) {
+  enabledElement.checked = totalMinutes !== null;
+  const value = totalMinutes ?? 0;
+  hoursElement.value = String(Math.floor(value / 60));
+  minutesElement.value = String(value % 60);
+}
+
+function isValidSharedPayload(payload) {
+  const validDate = /^\d{4}-\d{2}-\d{2}$/.test(payload?.d || "");
+  const validOverride = (value) =>
+    value === null || (Number.isInteger(value) && value >= 0 && value <= 1499);
+  return (
+    payload?.v === SHARED_SCHEDULE_VERSION &&
+    validDate &&
+    Number.isInteger(payload.s) &&
+    payload.s >= 0 &&
+    payload.s < MINUTES_PER_DAY &&
+    Number.isInteger(payload.b) &&
+    payload.b >= 0 &&
+    payload.b <= 1499 &&
+    [3, 4].includes(payload.c) &&
+    [1, 2].includes(payload.n) &&
+    validOverride(payload.o1) &&
+    validOverride(payload.o2) &&
+    (payload.n === 2 || payload.o2 === null)
+  );
+}
+
+function encodeSharedPayload(payload) {
+  const bytes = new TextEncoder().encode(JSON.stringify(payload));
+  let binary = "";
+  bytes.forEach((byte) => {
+    binary += String.fromCharCode(byte);
+  });
+  return btoa(binary).replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/, "");
+}
+
+function decodeSharedPayload(encodedPayload) {
+  const base64 = encodedPayload.replaceAll("-", "+").replaceAll("_", "/");
+  const padded = base64.padEnd(Math.ceil(base64.length / 4) * 4, "=");
+  const binary = atob(padded);
+  const bytes = Uint8Array.from(binary, (character) => character.charCodeAt(0));
+  return JSON.parse(new TextDecoder().decode(bytes));
 }
 
 function downloadPdf() {
