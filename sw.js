@@ -1,10 +1,11 @@
-const CACHE_NAME = "pilot-rest-v13";
+const CACHE_NAME = "pilot-rest-v14";
 const APP_FILES = [
   "./",
   "./index.html",
   "./pilot-rest-v1-break-overrides-styles.css?v=20260822-2",
   "./pilot-rest-v1-break-overrides-app.js?v=20260822-3",
   "./manifest.webmanifest",
+  "./icon-512.png",
   "./icon.svg"
 ];
 
