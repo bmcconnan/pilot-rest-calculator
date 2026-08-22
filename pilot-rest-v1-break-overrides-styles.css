@@ -557,8 +557,85 @@ tbody tr:last-child td {
   gap: 12px;
 }
 
-.model-toggle {
-  width: min(100%, 440px);
+.setting-switch-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: min(100%, 520px);
+  min-height: 64px;
+  gap: 16px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--field);
+  cursor: pointer;
+}
+
+.setting-switch-copy {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.setting-switch-copy strong {
+  color: var(--ink);
+  font-size: 0.92rem;
+}
+
+.setting-switch-copy small {
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.switch-control {
+  position: relative;
+  display: inline-flex;
+  width: 51px;
+  height: 31px;
+  flex: 0 0 51px;
+}
+
+.switch-control input {
+  position: absolute;
+  width: 1px;
+  min-height: 1px;
+  opacity: 0;
+}
+
+.switch-track {
+  position: relative;
+  width: 51px;
+  height: 31px;
+  border-radius: 999px;
+  background: #59615f;
+  transition: background 160ms ease;
+}
+
+.switch-track::after {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 27px;
+  height: 27px;
+  border-radius: 50%;
+  background: #ffffff;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.34);
+  content: "";
+  transition: transform 160ms ease;
+}
+
+.switch-control input:checked + .switch-track {
+  background: var(--accent);
+}
+
+.switch-control input:checked + .switch-track::after {
+  transform: translateX(20px);
+}
+
+.switch-control input:focus-visible + .switch-track {
+  outline: 3px solid rgba(80, 208, 189, 0.3);
+  outline-offset: 2px;
 }
 
 .settings-form .model-settings-group {

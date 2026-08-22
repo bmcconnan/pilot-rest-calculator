@@ -1,7 +1,7 @@
 "use strict";
 
 const MINUTES_PER_DAY = 1440;
-const SHARED_SCHEDULE_VERSION = 2;
+const SHARED_SCHEDULE_VERSION = 3;
 const SETTINGS_KEY = "pilot-rest-settings-v1";
 const INPUTS_KEY = "pilot-rest-inputs-v1";
 const DEFAULT_SETTINGS = Object.freeze({
@@ -15,6 +15,7 @@ const DEFAULT_SETTINGS = Object.freeze({
   tocModifier: 5,
   todModifier: 15,
   acBuffer: 0,
+  roundToFive: false,
   rememberInputs: true
 });
 
@@ -28,10 +29,11 @@ const els = Object.fromEntries(
     "deviceOffset", "deviceMessage", "usableRest", "totalPerPilot", "periodUsed", "slotCount",
     "scheduleContext", "scheduleBody", "shareStatus", "installStatus", "copyButton",
     "shareAppButton", "downloadButton", "shareButton", "resetButton", "startNowButton",
-    "openSettingsButton", "settingsModel", "settingsCrew",
+    "openSettingsButton", "settingsModel", "settingsModelState", "settingsCrew",
     "settingsBreaks", "settingsAlarmOffset", "rememberInputs", "settingsClimb",
     "settingsDescent", "settingsBurnBuffer", "settingsTocModifier", "settingsTodModifier",
-    "settingsAcBuffer", "saveSettingsButton", "resetSettingsButton", "settingsStatus"
+    "settingsAcBuffer", "roundToFive", "roundFiveState", "saveSettingsButton",
+    "resetSettingsButton", "settingsStatus"
   ].map((id) => [id, document.querySelector(`#${id}`)])
 );
 
@@ -40,6 +42,7 @@ let activeModel = settings.defaultModel;
 let activeFlightDate = todayUtcIsoDate();
 let activeBufferOverride = null;
 let activeModifierOverride = null;
+let activeRoundingOverride = null;
 let actualStartWasManuallyEdited = false;
 let latestResult = null;
 
@@ -134,12 +137,15 @@ function bindEvents() {
     activeFlightDate = todayUtcIsoDate();
     activeBufferOverride = null;
     activeModifierOverride = null;
+    activeRoundingOverride = null;
     actualStartWasManuallyEdited = false;
     hydrateCalculatorDefaults(true);
     renderAndRemember();
   });
   els.saveSettingsButton.addEventListener("click", saveSettings);
   els.resetSettingsButton.addEventListener("click", restoreDefaultSettings);
+  els.settingsModel.addEventListener("change", updateSettingsSwitchLabels);
+  els.roundToFive.addEventListener("change", updateSettingsSwitchLabels);
 }
 
 function switchView(view) {
@@ -234,6 +240,7 @@ function readInputs() {
     tocModifierMinutes: modifiers.toc,
     todModifierMinutes: modifiers.tod,
     extraBufferMinutes: activeBufferOverride ?? modelBuffer,
+    roundToFive: activeRoundingOverride ?? settings.roundToFive,
     crewCount: Number(getRadioValue("crewCount")),
     breaksPerPilot: Number(getRadioValue("breaksPerPilot")),
     firstOverrideMinutes: els.firstOverrideEnabled.checked
@@ -275,10 +282,16 @@ function calculateRest(inputs) {
     );
   }
 
-  const totalRestPerPilot = inputs.crewCount === 4
+  const unroundedTotalRestPerPilot = inputs.crewCount === 4
     ? Math.floor(usableRestMinutes / 2)
     : Math.floor(usableRestMinutes / 3);
-  const calculatedPeriod = Math.floor(totalRestPerPilot / inputs.breaksPerPilot);
+  const totalRestPerPilot = inputs.roundToFive
+    ? roundDownToFive(unroundedTotalRestPerPilot)
+    : unroundedTotalRestPerPilot;
+  const unroundedCalculatedPeriod = Math.floor(totalRestPerPilot / inputs.breaksPerPilot);
+  const calculatedPeriod = inputs.roundToFive
+    ? roundDownToFive(unroundedCalculatedPeriod)
+    : unroundedCalculatedPeriod;
   const restGroupCount = inputs.crewCount === 4 ? 2 : 3;
   const slotCount = restGroupCount * inputs.breaksPerPilot;
   const firstBreakDuration = inputs.firstOverrideMinutes ?? calculatedPeriod;
@@ -327,10 +340,11 @@ function render() {
 
 function buildScheduleContext(result) {
   const device = `${result.inputs.deviceTimeZone} (${formatOffsetForDate(new Date())})`;
+  const rounding = result.inputs.roundToFive ? " Calculated rest rounded down to 5 minutes." : "";
   if (result.inputs.model === "burn") {
-    return `${result.inputs.modelLabel}: ${formatDuration(result.inputs.burnMinutes)} minus ${result.inputs.climbModifierMinutes} min climb, ${result.inputs.descentModifierMinutes} min descent${formatExtraBuffer(result.inputs.extraBufferMinutes)}. Device alarms use ${device}.`;
+    return `${result.inputs.modelLabel}: ${formatDuration(result.inputs.burnMinutes)} minus ${result.inputs.climbModifierMinutes} min climb, ${result.inputs.descentModifierMinutes} min descent${formatExtraBuffer(result.inputs.extraBufferMinutes)}.${rounding} Device alarms use ${device}.`;
   }
-  return `${result.inputs.modelLabel}: ${formatClockMinutes(result.adjustedTocMinutes)} to ${formatClockMinutes(result.adjustedTodMinutes)} UTC${formatExtraBuffer(result.inputs.extraBufferMinutes)}. Device alarms use ${device}.`;
+  return `${result.inputs.modelLabel}: ${formatClockMinutes(result.adjustedTocMinutes)} to ${formatClockMinutes(result.adjustedTodMinutes)} UTC${formatExtraBuffer(result.inputs.extraBufferMinutes)}.${rounding} Device alarms use ${device}.`;
 }
 
 function formatExtraBuffer(minutes) {
@@ -357,6 +371,15 @@ function hydrateSettingsForm(value) {
   els.settingsTocModifier.value = String(value.tocModifier);
   els.settingsTodModifier.value = String(value.todModifier);
   els.settingsAcBuffer.value = String(value.acBuffer);
+  els.roundToFive.checked = value.roundToFive;
+  updateSettingsSwitchLabels();
+}
+
+function updateSettingsSwitchLabels() {
+  els.settingsModelState.textContent = els.settingsModel.checked ? "TOC / TOD" : "Burn Time";
+  els.roundFiveState.textContent = els.roundToFive.checked
+    ? "Round down to nearest 5 minutes"
+    : "Exact minutes";
 }
 
 function readSettingsForm() {
@@ -371,7 +394,8 @@ function readSettingsForm() {
     burnBuffer: Number(els.settingsBurnBuffer.value),
     tocModifier: Number(els.settingsTocModifier.value),
     todModifier: Number(els.settingsTodModifier.value),
-    acBuffer: Number(els.settingsAcBuffer.value)
+    acBuffer: Number(els.settingsAcBuffer.value),
+    roundToFive: els.roundToFive.checked
   });
 }
 
@@ -381,6 +405,7 @@ function saveSettings() {
   activeModel = settings.defaultModel;
   activeBufferOverride = null;
   activeModifierOverride = null;
+  activeRoundingOverride = null;
   actualStartWasManuallyEdited = false;
   hydrateCalculatorDefaults(false);
   updateModelUi();
@@ -396,6 +421,7 @@ function restoreDefaultSettings() {
   activeModel = settings.defaultModel;
   activeBufferOverride = null;
   activeModifierOverride = null;
+  activeRoundingOverride = null;
   actualStartWasManuallyEdited = false;
   hydrateSettingsForm(settings);
   hydrateCalculatorDefaults(false);
@@ -427,6 +453,7 @@ function normalizeSettings(value) {
     tocModifier: bounded(Number(value.tocModifier), 120, DEFAULT_SETTINGS.tocModifier),
     todModifier: bounded(Number(value.todModifier), 120, DEFAULT_SETTINGS.todModifier),
     acBuffer: bounded(Number(value.acBuffer), 120, DEFAULT_SETTINGS.acBuffer),
+    roundToFive: value.roundToFive === true,
     rememberInputs: value.rememberInputs !== false
   };
 }
@@ -441,7 +468,7 @@ function rememberInputs() {
 
 function restoreRememberedInputs() {
   try {
-    const payload = JSON.parse(localStorage.getItem(INPUTS_KEY) || "null");
+    const payload = upgradeSharedPayload(JSON.parse(localStorage.getItem(INPUTS_KEY) || "null"));
     if (isValidSharedPayload(payload)) {
       payload.d = todayUtcIsoDate();
       applySharedPayload(payload);
@@ -496,7 +523,8 @@ function buildSharedPayload(inputs) {
     b: inputs.burnMinutes, cm: inputs.climbModifierMinutes, dm: inputs.descentModifierMinutes,
     tc: inputs.estimatedTocMinutes, td: inputs.estimatedTodMinutes, tcm: inputs.tocModifierMinutes,
     tdm: inputs.todModifierMinutes, x: inputs.extraBufferMinutes, c: inputs.crewCount,
-    n: inputs.breaksPerPilot, o1: inputs.firstOverrideMinutes, o2: inputs.secondOverrideMinutes
+    n: inputs.breaksPerPilot, o1: inputs.firstOverrideMinutes, o2: inputs.secondOverrideMinutes,
+    r: inputs.roundToFive
   };
 }
 
@@ -515,6 +543,9 @@ function importSharedSchedule() {
 }
 
 function upgradeSharedPayload(payload) {
+  if (payload?.v === 2) {
+    return { ...payload, v: SHARED_SCHEDULE_VERSION, r: false };
+  }
   if (payload?.v !== 1) return payload;
   return {
     v: SHARED_SCHEDULE_VERSION,
@@ -532,7 +563,8 @@ function upgradeSharedPayload(payload) {
     c: payload.c,
     n: payload.n,
     o1: payload.o1,
-    o2: payload.o2
+    o2: payload.o2,
+    r: false
   };
 }
 
@@ -546,6 +578,7 @@ function applySharedPayload(payload) {
     toc: payload.tcm,
     tod: payload.tdm
   };
+  activeRoundingOverride = payload.r;
   actualStartWasManuallyEdited = true;
   setClockPicker(els.startHours, els.startMinutes, payload.s);
   setDurationPicker(els.burnHours, els.burnMinutes, payload.b);
@@ -568,7 +601,7 @@ function isValidSharedPayload(payload) {
     minute(payload.tc, 1439) && minute(payload.td, 1439) && minute(payload.tcm, 120) &&
     minute(payload.tdm, 120) && minute(payload.x, 120) && [3, 4].includes(payload.c) &&
     [1, 2].includes(payload.n) && override(payload.o1) && override(payload.o2) &&
-    (payload.n === 2 || payload.o2 === null);
+    typeof payload.r === "boolean" && (payload.n === 2 || payload.o2 === null);
 }
 
 function encodeSharedPayload(payload) {
@@ -640,6 +673,7 @@ function buildPdfLines(result) {
   const lines = [
     "PILOT REST SCHEDULE", "", `Calculation model: ${input.modelLabel}`, ...modelLines,
     `Additional buffer: -${input.extraBufferMinutes} minutes`, `Usable rest: ${formatDuration(result.usableRestMinutes)}`,
+    `Five-minute rounding: ${input.roundToFive ? "On" : "Off"}`,
     `Start UTC: ${formatClockMinutes(input.startMinutes)} UTC`, `Crew: ${input.crewCount}`,
     `Breaks per pilot: ${input.breaksPerPilot}`, `Rest period used: ${result.restPeriodSummary}`,
     `Device time zone: ${input.deviceTimeZone} (${formatOffsetForDate(new Date())})`,
@@ -685,7 +719,11 @@ function setOverridePicker(enabled, hours, minutes, totalMinutes) {
 }
 
 function getModelLabel(model) {
-  return model === "ac" ? "TOC / TOD (AC)" : "Burn Time";
+  return model === "ac" ? "TOC / TOD" : "Burn Time";
+}
+
+function roundDownToFive(minutes) {
+  return Math.floor(minutes / 5) * 5;
 }
 
 function setClockPicker(hours, minutes, totalMinutes) {
