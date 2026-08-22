@@ -4,8 +4,8 @@ const MINUTES_PER_DAY = 1440;
 const INITIAL_DEFAULTS = {
   startHours: 12,
   startMinutes: 55,
-  burnHours: 8,
-  burnMinutes: 39,
+  burnHours: 9,
+  burnMinutes: 0,
   crewCount: 3,
   breaksPerPilot: 1,
   firstOverrideEnabled: false,

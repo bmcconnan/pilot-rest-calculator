@@ -278,15 +278,24 @@ select {
 
 .summary-panel {
   display: grid;
-  gap: 18px;
+  gap: 14px;
   align-content: start;
   padding: 16px;
+}
+
+.summary-heading h2 {
+  font-size: 1.2rem;
+  line-height: 1.1;
 }
 
 .metric-strip {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 10px;
+}
+
+.metric-strip span {
+  font-size: 0.9rem;
 }
 
 .metric-strip div,
@@ -305,6 +314,10 @@ select {
 .time-readout strong {
   font-size: 1.35rem;
   letter-spacing: 0;
+}
+
+.metric-strip strong {
+  font-size: 1.55rem;
 }
 
 .device-check {
