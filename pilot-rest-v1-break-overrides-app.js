@@ -6,8 +6,6 @@ const SETTINGS_KEY = "pilot-rest-settings-v1";
 const INPUTS_KEY = "pilot-rest-inputs-v1";
 const DEFAULT_SETTINGS = Object.freeze({
   defaultModel: "burn",
-  burnModelLabel: "Burn Time",
-  acModelLabel: "TOC / TOD (AC)",
   crewCount: 3,
   breaksPerPilot: 1,
   alarmOffset: 15,
@@ -30,7 +28,7 @@ const els = Object.fromEntries(
     "deviceOffset", "deviceMessage", "usableRest", "totalPerPilot", "periodUsed", "slotCount",
     "scheduleContext", "scheduleBody", "shareStatus", "installStatus", "copyButton",
     "shareAppButton", "downloadButton", "shareButton", "resetButton", "startNowButton",
-    "openSettingsButton", "settingsModel", "burnModelLabel", "acModelLabel", "settingsCrew",
+    "openSettingsButton", "settingsModel", "settingsCrew",
     "settingsBreaks", "settingsAlarmOffset", "rememberInputs", "settingsClimb",
     "settingsDescent", "settingsBurnBuffer", "settingsTocModifier", "settingsTodModifier",
     "settingsAcBuffer", "saveSettingsButton", "resetSettingsButton", "settingsStatus"
@@ -195,8 +193,6 @@ function updateModelUi() {
   els.acModelFields.classList.toggle("is-hidden", !isAc);
   els.activeModelName.textContent = getModelLabel(activeModel);
   els.startTimeLabel.textContent = isAc ? "Actual Start Time (UTC)" : "Start time UTC";
-  els.settingsModel.querySelector('option[value="burn"]').textContent = settings.burnModelLabel;
-  els.settingsModel.querySelector('option[value="ac"]').textContent = settings.acModelLabel;
 }
 
 function syncActualStartToAdjustedToc() {
@@ -350,9 +346,7 @@ function updateDeviceClock() {
 }
 
 function hydrateSettingsForm(value) {
-  els.settingsModel.value = value.defaultModel;
-  els.burnModelLabel.value = value.burnModelLabel;
-  els.acModelLabel.value = value.acModelLabel;
+  els.settingsModel.checked = value.defaultModel === "ac";
   els.settingsCrew.value = String(value.crewCount);
   els.settingsBreaks.value = String(value.breaksPerPilot);
   els.settingsAlarmOffset.value = String(value.alarmOffset);
@@ -367,9 +361,7 @@ function hydrateSettingsForm(value) {
 
 function readSettingsForm() {
   return normalizeSettings({
-    defaultModel: els.settingsModel.value,
-    burnModelLabel: els.burnModelLabel.value.trim() || DEFAULT_SETTINGS.burnModelLabel,
-    acModelLabel: els.acModelLabel.value.trim() || DEFAULT_SETTINGS.acModelLabel,
+    defaultModel: els.settingsModel.checked ? "ac" : "burn",
     crewCount: Number(els.settingsCrew.value),
     breaksPerPilot: Number(els.settingsBreaks.value),
     alarmOffset: Number(els.settingsAlarmOffset.value),
@@ -426,8 +418,6 @@ function normalizeSettings(value) {
     : fallback;
   return {
     defaultModel: value.defaultModel === "ac" ? "ac" : "burn",
-    burnModelLabel: String(value.burnModelLabel || DEFAULT_SETTINGS.burnModelLabel).slice(0, 28),
-    acModelLabel: String(value.acModelLabel || DEFAULT_SETTINGS.acModelLabel).slice(0, 28),
     crewCount: Number(value.crewCount) === 4 ? 4 : 3,
     breaksPerPilot: Number(value.breaksPerPilot) === 2 ? 2 : 1,
     alarmOffset: bounded(Number(value.alarmOffset), 59, DEFAULT_SETTINGS.alarmOffset),
@@ -695,7 +685,7 @@ function setOverridePicker(enabled, hours, minutes, totalMinutes) {
 }
 
 function getModelLabel(model) {
-  return model === "ac" ? settings.acModelLabel : settings.burnModelLabel;
+  return model === "ac" ? "TOC / TOD (AC)" : "Burn Time";
 }
 
 function setClockPicker(hours, minutes, totalMinutes) {

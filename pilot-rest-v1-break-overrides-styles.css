@@ -557,6 +557,24 @@ tbody tr:last-child td {
   gap: 12px;
 }
 
+.model-toggle {
+  width: min(100%, 440px);
+}
+
+.settings-form .model-settings-group {
+  margin-top: 18px;
+  padding-top: 24px;
+  border-top: 1px solid var(--line);
+}
+
+.burn-settings legend {
+  color: var(--accent);
+}
+
+.ac-settings legend {
+  color: var(--warn);
+}
+
 .toggle-row {
   display: flex;
   align-items: center;
