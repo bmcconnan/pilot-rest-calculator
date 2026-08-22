@@ -9,7 +9,7 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <link rel="manifest" href="./manifest.webmanifest" />
     <link rel="apple-touch-icon" href="./icon-512.png" />
-    <link rel="stylesheet" href="./pilot-rest-v1-break-overrides-styles.css?v=20260822-8" />
+    <link rel="stylesheet" href="./pilot-rest-v1-break-overrides-styles.css?v=20260822-9" />
     <title>Pilot Rest Calculator</title>
   </head>
   <body>
@@ -179,7 +179,7 @@
             </label>
           </fieldset>
 
-          <fieldset class="model-settings-group burn-settings">
+          <fieldset>
             <legend>Default Schedule</legend>
             <div class="settings-grid">
               <label><span>Number of crew</span><select id="settingsCrew"><option value="3">3</option><option value="4">4</option></select></label>
@@ -193,7 +193,11 @@
             </label>
           </fieldset>
 
-          <fieldset class="model-settings-group ac-settings">
+          <div class="model-inputs-heading">
+            <h3>Calculator Model Inputs</h3>
+          </div>
+
+          <fieldset class="model-settings-group burn-settings">
             <legend>Burn Time Model</legend>
             <div class="settings-grid">
               <label><span>Climb modifier</span><select id="settingsClimb"></select></label>
@@ -202,7 +206,7 @@
             </div>
           </fieldset>
 
-          <fieldset>
+          <fieldset class="model-settings-group ac-settings">
             <legend>TOC / TOD Model</legend>
             <div class="settings-grid">
               <label><span>TOC + modifier</span><select id="settingsTocModifier"></select></label>

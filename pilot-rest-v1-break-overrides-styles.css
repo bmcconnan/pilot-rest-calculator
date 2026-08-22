@@ -638,18 +638,32 @@ tbody tr:last-child td {
   outline-offset: 2px;
 }
 
-.settings-form .model-settings-group {
+.model-inputs-heading {
   margin-top: 18px;
+  padding: 24px 18px 14px;
+  border-top: 12px solid var(--surface);
+}
+
+.model-inputs-heading h3 {
+  color: var(--ink);
+  font-size: 1.45rem;
+  line-height: 1.1;
+}
+
+.settings-form .model-settings-group {
+  margin-top: 0;
   padding-top: 24px;
   border-top: 1px solid var(--line);
 }
 
-.burn-settings legend {
-  color: var(--accent);
+.settings-form .ac-settings {
+  margin-top: 24px;
+  border-top: 12px solid var(--surface);
 }
 
+.burn-settings legend,
 .ac-settings legend {
-  color: var(--warn);
+  color: var(--ink);
 }
 
 .toggle-row {
