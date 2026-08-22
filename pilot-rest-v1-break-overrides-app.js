@@ -1,76 +1,62 @@
 "use strict";
 
 const MINUTES_PER_DAY = 1440;
-const SHARED_SCHEDULE_VERSION = 1;
-const INITIAL_DEFAULTS = {
-  startHours: 12,
-  startMinutes: 55,
-  burnHours: 9,
-  burnMinutes: 0,
+const SHARED_SCHEDULE_VERSION = 2;
+const SETTINGS_KEY = "pilot-rest-settings-v1";
+const INPUTS_KEY = "pilot-rest-inputs-v1";
+const DEFAULT_SETTINGS = Object.freeze({
+  defaultModel: "burn",
+  burnModelLabel: "Burn Time",
+  acModelLabel: "TOC / TOD (AC)",
   crewCount: 3,
   breaksPerPilot: 1,
-  firstOverrideEnabled: false,
-  firstOverrideHours: 0,
-  firstOverrideMinutes: 0,
-  secondOverrideEnabled: false,
-  secondOverrideHours: 0,
-  secondOverrideMinutes: 0,
-  alarmOffset: -15
-};
-const RESET_DEFAULTS = {
-  ...INITIAL_DEFAULTS,
-  startHours: 0,
-  startMinutes: 0,
-  burnHours: 0,
-  burnMinutes: 0
-};
+  alarmOffset: 15,
+  climbModifier: 20,
+  descentModifier: 40,
+  burnBuffer: 0,
+  tocModifier: 5,
+  todModifier: 15,
+  acBuffer: 0,
+  rememberInputs: true
+});
 
-const els = {
-  form: document.querySelector("#calculatorForm"),
-  startHours: document.querySelector("#startHours"),
-  startMinutes: document.querySelector("#startMinutes"),
-  burnHours: document.querySelector("#burnHours"),
-  burnMinutes: document.querySelector("#burnMinutes"),
-  firstOverrideEnabled: document.querySelector("#firstOverrideEnabled"),
-  firstOverrideHours: document.querySelector("#firstOverrideHours"),
-  firstOverrideMinutes: document.querySelector("#firstOverrideMinutes"),
-  secondOverridePanel: document.querySelector("#secondOverridePanel"),
-  secondOverrideEnabled: document.querySelector("#secondOverrideEnabled"),
-  secondOverrideHours: document.querySelector("#secondOverrideHours"),
-  secondOverrideMinutes: document.querySelector("#secondOverrideMinutes"),
-  alarmOffset: document.querySelector("#alarmOffset"),
-  currentUtc: document.querySelector("#currentUtc"),
-  deviceClock: document.querySelector("#deviceClock"),
-  deviceOffset: document.querySelector("#deviceOffset"),
-  deviceMessage: document.querySelector("#deviceMessage"),
-  usableRest: document.querySelector("#usableRest"),
-  totalPerPilot: document.querySelector("#totalPerPilot"),
-  periodUsed: document.querySelector("#periodUsed"),
-  slotCount: document.querySelector("#slotCount"),
-  scheduleContext: document.querySelector("#scheduleContext"),
-  scheduleBody: document.querySelector("#scheduleBody"),
-  shareStatus: document.querySelector("#shareStatus"),
-  installStatus: document.querySelector("#installStatus"),
-  copyButton: document.querySelector("#copyButton"),
-  shareAppButton: document.querySelector("#shareAppButton"),
-  downloadButton: document.querySelector("#downloadButton"),
-  shareButton: document.querySelector("#shareButton"),
-  resetButton: document.querySelector("#resetButton"),
-  startNowButton: document.querySelector("#startNowButton")
-};
+const els = Object.fromEntries(
+  [
+    "calculatorView", "settingsView", "calculatorForm", "settingsForm", "burnModelFields",
+    "acModelFields", "activeModelName", "startTimeLabel", "burnHours", "burnMinutes",
+    "climbModifier", "descentModifier", "tocHours", "tocMinutes", "todHours", "todMinutes",
+    "tocModifier", "todModifier", "startHours", "startMinutes", "firstOverrideEnabled",
+    "firstOverrideHours", "firstOverrideMinutes", "secondOverridePanel", "secondOverrideEnabled",
+    "secondOverrideHours", "secondOverrideMinutes", "alarmOffset", "currentUtc", "deviceClock",
+    "deviceOffset", "deviceMessage", "usableRest", "totalPerPilot", "periodUsed", "slotCount",
+    "scheduleContext", "scheduleBody", "shareStatus", "installStatus", "copyButton",
+    "shareAppButton", "downloadButton", "shareButton", "resetButton", "startNowButton",
+    "openSettingsButton", "settingsModel", "burnModelLabel", "acModelLabel", "settingsCrew",
+    "settingsBreaks", "settingsAlarmOffset", "rememberInputs", "settingsClimb",
+    "settingsDescent", "settingsBurnBuffer", "settingsTocModifier", "settingsTodModifier",
+    "settingsAcBuffer", "saveSettingsButton", "resetSettingsButton", "settingsStatus"
+  ].map((id) => [id, document.querySelector(`#${id}`)])
+);
 
-let latestResult = null;
+let settings = loadSettings();
+let activeModel = settings.defaultModel;
 let activeFlightDate = todayUtcIsoDate();
+let activeBufferOverride = null;
+let actualStartWasManuallyEdited = false;
+let latestResult = null;
 
 init();
 
 function init() {
-  populateStartTimePickers();
-  populateDurationPickers();
-  populateAlarmOffsetPicker();
-  hydrateDefaults(INITIAL_DEFAULTS);
+  populatePickers();
+  hydrateSettingsForm(settings);
+  hydrateCalculatorDefaults(false);
   const importedSchedule = importSharedSchedule();
+  if (!importedSchedule && settings.rememberInputs) {
+    restoreRememberedInputs();
+  }
   bindEvents();
+  updateModelUi();
   registerServiceWorker();
   render();
   if (importedSchedule) {
@@ -79,264 +65,279 @@ function init() {
   setInterval(updateDeviceClock, 15000);
 }
 
-function populateStartTimePickers() {
-  els.startHours.innerHTML = range(0, 23)
-    .map((hour) => `<option value="${hour}">${String(hour).padStart(2, "0")}</option>`)
-    .join("");
-  els.startMinutes.innerHTML = range(0, 59)
-    .map((minute) => `<option value="${minute}">${String(minute).padStart(2, "0")}</option>`)
-    .join("");
+function populatePickers() {
+  [
+    [els.startHours, els.startMinutes],
+    [els.tocHours, els.tocMinutes],
+    [els.todHours, els.todMinutes]
+  ].forEach(([hours, minutes]) => populateClockPicker(hours, minutes));
+  [
+    [els.burnHours, els.burnMinutes],
+    [els.firstOverrideHours, els.firstOverrideMinutes],
+    [els.secondOverrideHours, els.secondOverrideMinutes]
+  ].forEach(([hours, minutes]) => populateDurationPicker(hours, minutes));
+
+  populateMinutePicker(els.climbModifier, 120);
+  populateMinutePicker(els.descentModifier, 120);
+  populateMinutePicker(els.tocModifier, 120);
+  populateMinutePicker(els.todModifier, 120);
+  populateMinutePicker(els.settingsClimb, 120);
+  populateMinutePicker(els.settingsDescent, 120);
+  populateMinutePicker(els.settingsBurnBuffer, 120);
+  populateMinutePicker(els.settingsTocModifier, 120);
+  populateMinutePicker(els.settingsTodModifier, 120);
+  populateMinutePicker(els.settingsAcBuffer, 120);
+  populateAlarmPicker(els.alarmOffset);
+  populateAlarmPicker(els.settingsAlarmOffset);
 }
 
-function populateDurationPickers() {
-  populateDurationPicker(els.burnHours, els.burnMinutes);
-  populateDurationPicker(els.firstOverrideHours, els.firstOverrideMinutes);
-  populateDurationPicker(els.secondOverrideHours, els.secondOverrideMinutes);
+function populateClockPicker(hoursElement, minutesElement) {
+  hoursElement.innerHTML = range(0, 23)
+    .map((value) => `<option value="${value}">${String(value).padStart(2, "0")}</option>`)
+    .join("");
+  minutesElement.innerHTML = range(0, 59)
+    .map((value) => `<option value="${value}">${String(value).padStart(2, "0")}</option>`)
+    .join("");
 }
 
 function populateDurationPicker(hoursElement, minutesElement) {
   hoursElement.innerHTML = range(0, 24)
-    .map((hour) => `<option value="${hour}">${hour}</option>`)
+    .map((value) => `<option value="${value}">${value}</option>`)
     .join("");
   minutesElement.innerHTML = range(0, 59)
-    .map((minute) => `<option value="${minute}">${String(minute).padStart(2, "0")}</option>`)
+    .map((value) => `<option value="${value}">${String(value).padStart(2, "0")}</option>`)
     .join("");
 }
 
-function populateAlarmOffsetPicker() {
-  els.alarmOffset.innerHTML = range(0, 59)
-    .map((minute) => {
-      const label = minute === 0 ? "0" : `-${String(minute).padStart(2, "0")}`;
-      return `<option value="${minute}">${label}</option>`;
-    })
+function populateMinutePicker(element, maximum) {
+  element.innerHTML = range(0, maximum)
+    .map((value) => `<option value="${value}">${value} min</option>`)
     .join("");
 }
 
-function hydrateDefaults(defaults) {
-  els.startHours.value = String(defaults.startHours);
-  els.startMinutes.value = String(defaults.startMinutes);
-  els.burnHours.value = String(defaults.burnHours);
-  els.burnMinutes.value = String(defaults.burnMinutes);
-  els.firstOverrideEnabled.checked = defaults.firstOverrideEnabled;
-  els.firstOverrideHours.value = String(defaults.firstOverrideHours);
-  els.firstOverrideMinutes.value = String(defaults.firstOverrideMinutes);
-  els.secondOverrideEnabled.checked = defaults.secondOverrideEnabled;
-  els.secondOverrideHours.value = String(defaults.secondOverrideHours);
-  els.secondOverrideMinutes.value = String(defaults.secondOverrideMinutes);
-  els.alarmOffset.value = String(Math.abs(defaults.alarmOffset));
-  setRadioValue("crewCount", defaults.crewCount);
-  setRadioValue("breaksPerPilot", defaults.breaksPerPilot);
-  updateSecondOverrideVisibility(defaults.breaksPerPilot);
+function populateAlarmPicker(element) {
+  element.innerHTML = range(0, 59)
+    .map((value) => `<option value="${value}">${value === 0 ? "0" : `-${String(value).padStart(2, "0")} min`}</option>`)
+    .join("");
 }
 
 function bindEvents() {
-  els.form.addEventListener("input", handleFormChange);
-  els.form.addEventListener("change", handleFormChange);
-  els.alarmOffset.addEventListener("input", render);
-  els.alarmOffset.addEventListener("change", render);
+  document.querySelectorAll(".view-tab").forEach((button) => {
+    button.addEventListener("click", () => switchView(button.dataset.view));
+  });
+  els.openSettingsButton.addEventListener("click", () => switchView("settings"));
+  els.calculatorForm.addEventListener("input", handleCalculatorChange);
+  els.calculatorForm.addEventListener("change", handleCalculatorChange);
   els.copyButton.addEventListener("click", copySchedule);
   els.shareAppButton.addEventListener("click", shareAppSchedule);
   els.downloadButton.addEventListener("click", downloadPdf);
   els.shareButton.addEventListener("click", sharePdf);
   els.startNowButton.addEventListener("click", () => {
+    actualStartWasManuallyEdited = true;
     setStartToCurrentUtc();
-    render();
+    renderAndRemember();
   });
   els.resetButton.addEventListener("click", () => {
     activeFlightDate = todayUtcIsoDate();
-    hydrateDefaults(RESET_DEFAULTS);
-    render();
+    activeBufferOverride = null;
+    actualStartWasManuallyEdited = false;
+    hydrateCalculatorDefaults(true);
+    renderAndRemember();
   });
+  els.saveSettingsButton.addEventListener("click", saveSettings);
+  els.resetSettingsButton.addEventListener("click", restoreDefaultSettings);
 }
 
-function handleFormChange() {
+function switchView(view) {
+  const showSettings = view === "settings";
+  els.calculatorView.classList.toggle("is-hidden", showSettings);
+  els.settingsView.classList.toggle("is-hidden", !showSettings);
+  document.querySelectorAll(".view-tab").forEach((button) => {
+    const active = button.dataset.view === view;
+    button.classList.toggle("is-active", active);
+    button.setAttribute("aria-selected", String(active));
+  });
+  if (showSettings) {
+    hydrateSettingsForm(settings);
+    els.settingsStatus.textContent = "";
+  }
+}
+
+function handleCalculatorChange(event) {
+  if (event.target === els.startHours || event.target === els.startMinutes) {
+    actualStartWasManuallyEdited = true;
+  }
+  if (
+    activeModel === "ac" &&
+    !actualStartWasManuallyEdited &&
+    [els.tocHours, els.tocMinutes, els.tocModifier].includes(event.target)
+  ) {
+    syncActualStartToAdjustedToc();
+  }
   updateSecondOverrideVisibility(Number(getRadioValue("breaksPerPilot")));
-  render();
+  renderAndRemember();
+}
+
+function hydrateCalculatorDefaults(resetToZero) {
+  setClockPicker(els.startHours, els.startMinutes, resetToZero ? 0 : 12 * 60 + 55);
+  setDurationPicker(els.burnHours, els.burnMinutes, resetToZero ? 0 : 9 * 60);
+  setClockPicker(els.tocHours, els.tocMinutes, resetToZero ? 0 : 8 * 60 + 55);
+  setClockPicker(els.todHours, els.todMinutes, resetToZero ? 0 : 12 * 60 + 15);
+  els.climbModifier.value = String(settings.climbModifier);
+  els.descentModifier.value = String(settings.descentModifier);
+  els.tocModifier.value = String(settings.tocModifier);
+  els.todModifier.value = String(settings.todModifier);
+  els.alarmOffset.value = String(settings.alarmOffset);
+  setRadioValue("crewCount", settings.crewCount);
+  setRadioValue("breaksPerPilot", settings.breaksPerPilot);
+  setOverridePicker(els.firstOverrideEnabled, els.firstOverrideHours, els.firstOverrideMinutes, null);
+  setOverridePicker(els.secondOverrideEnabled, els.secondOverrideHours, els.secondOverrideMinutes, null);
+  updateSecondOverrideVisibility(settings.breaksPerPilot);
+  if (activeModel === "ac" && !resetToZero) {
+    syncActualStartToAdjustedToc();
+  }
+}
+
+function updateModelUi() {
+  const isAc = activeModel === "ac";
+  els.burnModelFields.classList.toggle("is-hidden", isAc);
+  els.acModelFields.classList.toggle("is-hidden", !isAc);
+  els.activeModelName.textContent = getModelLabel(activeModel);
+  els.startTimeLabel.textContent = isAc ? "Actual Start Time (UTC)" : "Start time UTC";
+  els.settingsModel.querySelector('option[value="burn"]').textContent = settings.burnModelLabel;
+  els.settingsModel.querySelector('option[value="ac"]').textContent = settings.acModelLabel;
+}
+
+function syncActualStartToAdjustedToc() {
+  setClockPicker(
+    els.startHours,
+    els.startMinutes,
+    getClockMinutes(els.tocHours, els.tocMinutes) + Number(els.tocModifier.value || 0)
+  );
 }
 
 function setStartToCurrentUtc() {
   const now = new Date();
   els.startHours.value = String(now.getUTCHours());
   els.startMinutes.value = String(now.getUTCMinutes());
+  activeFlightDate = todayUtcIsoDate();
 }
 
 function updateSecondOverrideVisibility(breaksPerPilot) {
-  const showSecondOverride = breaksPerPilot === 2;
-  els.secondOverridePanel.classList.toggle("is-hidden", !showSecondOverride);
-
-  if (!showSecondOverride) {
+  const visible = breaksPerPilot === 2;
+  els.secondOverridePanel.classList.toggle("is-hidden", !visible);
+  if (!visible) {
     els.secondOverrideEnabled.checked = false;
   }
 }
 
 function readInputs() {
-  const startHours = Number(els.startHours.value);
-  const startMinutesPart = Number(els.startMinutes.value);
-  const burnHours = Number(els.burnHours.value);
-  const burnMinutesPart = Number(els.burnMinutes.value);
-  const firstOverrideMinutes = getDurationPickerMinutes(
-    els.firstOverrideHours,
-    els.firstOverrideMinutes
-  );
-  const secondOverrideMinutes = getDurationPickerMinutes(
-    els.secondOverrideHours,
-    els.secondOverrideMinutes
-  );
-
+  const modelBuffer = activeModel === "burn" ? settings.burnBuffer : settings.acBuffer;
   return {
+    model: activeModel,
+    modelLabel: getModelLabel(activeModel),
     flightDate: activeFlightDate,
-    startMinutes: startHours * 60 + startMinutesPart,
-    burnMinutes: burnHours * 60 + burnMinutesPart,
+    startMinutes: getClockMinutes(els.startHours, els.startMinutes),
+    burnMinutes: getDurationMinutes(els.burnHours, els.burnMinutes),
+    climbModifierMinutes: Number(els.climbModifier.value),
+    descentModifierMinutes: Number(els.descentModifier.value),
+    estimatedTocMinutes: getClockMinutes(els.tocHours, els.tocMinutes),
+    estimatedTodMinutes: getClockMinutes(els.todHours, els.todMinutes),
+    tocModifierMinutes: Number(els.tocModifier.value),
+    todModifierMinutes: Number(els.todModifier.value),
+    extraBufferMinutes: activeBufferOverride ?? modelBuffer,
     crewCount: Number(getRadioValue("crewCount")),
     breaksPerPilot: Number(getRadioValue("breaksPerPilot")),
-    firstOverrideMinutes: els.firstOverrideEnabled.checked ? firstOverrideMinutes : null,
+    firstOverrideMinutes: els.firstOverrideEnabled.checked
+      ? getDurationMinutes(els.firstOverrideHours, els.firstOverrideMinutes)
+      : null,
     secondOverrideMinutes:
       els.secondOverrideEnabled.checked && Number(getRadioValue("breaksPerPilot")) === 2
-        ? secondOverrideMinutes
+        ? getDurationMinutes(els.secondOverrideHours, els.secondOverrideMinutes)
         : null,
     alarmOffsetMinutes: -Math.abs(Number(els.alarmOffset.value || 0)),
     deviceTimeZone: getDeviceTimeZone()
   };
 }
 
-function getDurationPickerMinutes(hoursElement, minutesElement) {
-  return Number(hoursElement.value) * 60 + Number(minutesElement.value);
-}
-
 function calculateRest(inputs) {
-  const usableRestMinutes = Math.max(inputs.burnMinutes - 60, 0);
-  const totalRestPerPilot =
-    inputs.crewCount === 4
-      ? Math.floor(usableRestMinutes / 2)
-      : inputs.crewCount === 3
-        ? Math.floor(usableRestMinutes / 3)
-        : 0;
+  let usableRestMinutes;
+  let adjustedTocMinutes = null;
+  let adjustedTodMinutes = null;
+  if (inputs.model === "burn") {
+    usableRestMinutes = Math.max(
+      inputs.burnMinutes - inputs.climbModifierMinutes - inputs.descentModifierMinutes - inputs.extraBufferMinutes,
+      0
+    );
+  } else {
+    adjustedTocMinutes = inputs.estimatedTocMinutes + inputs.tocModifierMinutes;
+    adjustedTodMinutes = inputs.estimatedTodMinutes - inputs.todModifierMinutes;
+    usableRestMinutes = Math.max(
+      calculateWindowMinutes(adjustedTocMinutes, adjustedTodMinutes) - inputs.extraBufferMinutes,
+      0
+    );
+  }
+
+  const totalRestPerPilot = inputs.crewCount === 4
+    ? Math.floor(usableRestMinutes / 2)
+    : Math.floor(usableRestMinutes / 3);
   const calculatedPeriod = Math.floor(totalRestPerPilot / inputs.breaksPerPilot);
   const restGroupCount = inputs.crewCount === 4 ? 2 : 3;
   const slotCount = restGroupCount * inputs.breaksPerPilot;
   const firstBreakDuration = inputs.firstOverrideMinutes ?? calculatedPeriod;
-  const secondBreakDuration =
-    inputs.breaksPerPilot === 2
-      ? (inputs.secondOverrideMinutes ?? Math.max(totalRestPerPilot - firstBreakDuration, 0))
-      : null;
-  const restPeriodSummary =
-    inputs.breaksPerPilot === 2
-      ? `${formatDuration(firstBreakDuration)} / ${formatDuration(secondBreakDuration)}`
-      : formatDuration(firstBreakDuration);
-  const flightStartUtc = dateAndMinutesToUtc(inputs.flightDate, inputs.startMinutes);
-  let restCursorUtc = flightStartUtc;
-
+  const secondBreakDuration = inputs.breaksPerPilot === 2
+    ? (inputs.secondOverrideMinutes ?? Math.max(totalRestPerPilot - firstBreakDuration, 0))
+    : null;
+  const restPeriodSummary = inputs.breaksPerPilot === 2
+    ? `${formatDuration(firstBreakDuration)} / ${formatDuration(secondBreakDuration)}`
+    : formatDuration(firstBreakDuration);
+  let restCursorUtc = dateAndMinutesToUtc(inputs.flightDate, inputs.startMinutes);
   const rows = Array.from({ length: slotCount }, (_, index) => {
-    const durationMinutes =
-      inputs.breaksPerPilot === 2 && index >= restGroupCount
-        ? secondBreakDuration
-        : firstBreakDuration;
+    const durationMinutes = inputs.breaksPerPilot === 2 && index >= restGroupCount
+      ? secondBreakDuration
+      : firstBreakDuration;
     const restStartUtc = restCursorUtc;
     const restEndUtc = addMinutes(restStartUtc, durationMinutes);
     const deviceAlarm = addMinutes(restEndUtc, inputs.alarmOffsetMinutes);
     restCursorUtc = restEndUtc;
-    return {
-      label: `Break ${index + 1}`,
-      restStartUtc,
-      restEndUtc,
-      deviceAlarm,
-      durationMinutes
-    };
+    return { label: `Break ${index + 1}`, restStartUtc, restEndUtc, deviceAlarm, durationMinutes };
   });
-
   return {
-    inputs,
-    usableRestMinutes,
-    totalRestPerPilot,
-    calculatedPeriod,
-    firstBreakDuration,
-    secondBreakDuration,
-    restPeriodSummary,
-    slotCount,
-    rows
+    inputs, usableRestMinutes, adjustedTocMinutes, adjustedTodMinutes, totalRestPerPilot,
+    calculatedPeriod, firstBreakDuration, secondBreakDuration, restPeriodSummary, slotCount, rows
   };
 }
 
+function renderAndRemember() {
+  render();
+  rememberInputs();
+}
+
 function render() {
-  clearValidation();
-  const inputs = readInputs();
-  const validation = validateInputs(inputs);
-
-  if (validation.length > 0) {
-    latestResult = null;
-    renderInvalid(validation);
-    return;
-  }
-
-  latestResult = calculateRest(inputs);
-  renderSummary(latestResult);
-  renderSchedule(latestResult);
+  latestResult = calculateRest(readInputs());
+  els.usableRest.textContent = formatDuration(latestResult.usableRestMinutes);
+  els.totalPerPilot.textContent = formatDuration(latestResult.totalRestPerPilot);
+  els.periodUsed.textContent = latestResult.restPeriodSummary;
+  els.slotCount.textContent = String(latestResult.slotCount);
+  els.scheduleContext.textContent = buildScheduleContext(latestResult);
+  els.scheduleBody.innerHTML = latestResult.rows.map((row) => `<tr>
+    <td>${row.label}</td><td>${formatUtcTime(row.restStartUtc)}</td><td>${formatUtcTime(row.restEndUtc)}</td>
+    <td>${formatDeviceTime(row.deviceAlarm)}</td><td>${formatDuration(row.durationMinutes)}</td>
+  </tr>`).join("");
   updateDeviceClock();
   els.shareStatus.textContent = "";
 }
 
-function validateInputs(inputs) {
-  const errors = [];
-  if (!Number.isFinite(inputs.startMinutes)) {
-    errors.push({ field: els.startHours, message: "Select a valid UTC start time." });
+function buildScheduleContext(result) {
+  const device = `${result.inputs.deviceTimeZone} (${formatOffsetForDate(new Date())})`;
+  if (result.inputs.model === "burn") {
+    return `${result.inputs.modelLabel}: ${formatDuration(result.inputs.burnMinutes)} minus ${result.inputs.climbModifierMinutes} min climb, ${result.inputs.descentModifierMinutes} min descent${formatExtraBuffer(result.inputs.extraBufferMinutes)}. Device alarms use ${device}.`;
   }
-  if (inputs.burnMinutes < 0) {
-    errors.push({ field: els.burnHours, message: "Select a valid burn time." });
-  }
-  if (!Number.isFinite(inputs.alarmOffsetMinutes)) {
-    errors.push({ field: els.alarmOffset, message: "Enter alarm offset in minutes." });
-  }
-  return errors;
+  return `${result.inputs.modelLabel}: ${formatClockMinutes(result.adjustedTocMinutes)} to ${formatClockMinutes(result.adjustedTodMinutes)} UTC${formatExtraBuffer(result.inputs.extraBufferMinutes)}. Device alarms use ${device}.`;
 }
 
-function clearValidation() {
-  [
-    els.startHours,
-    els.startMinutes,
-    els.burnHours,
-    els.burnMinutes,
-    els.firstOverrideHours,
-    els.firstOverrideMinutes,
-    els.secondOverrideHours,
-    els.secondOverrideMinutes,
-    els.alarmOffset
-  ].forEach((field) => field.classList.remove("invalid"));
-}
-
-function renderInvalid(errors) {
-  errors.forEach((error) => error.field.classList.add("invalid"));
-  els.usableRest.textContent = "--:--";
-  els.totalPerPilot.textContent = "--:--";
-  els.periodUsed.textContent = "--:--";
-  els.slotCount.textContent = "0";
-  els.scheduleBody.innerHTML = `<tr><td colspan="5">${errors[0].message}</td></tr>`;
-  els.scheduleContext.textContent = "";
-  els.deviceMessage.textContent = errors[0].message;
-  els.deviceMessage.classList.add("warn");
-}
-
-function renderSummary(result) {
-  els.usableRest.textContent = formatDuration(result.usableRestMinutes);
-  els.totalPerPilot.textContent = formatDuration(result.totalRestPerPilot);
-  els.periodUsed.textContent = result.restPeriodSummary;
-  els.slotCount.textContent = String(result.slotCount);
-  els.scheduleContext.textContent = `Device alarm times use ${result.inputs.deviceTimeZone} (${formatOffsetForDate(
-    new Date()
-  )}).`;
-}
-
-function renderSchedule(result) {
-  els.scheduleBody.innerHTML = result.rows
-    .map((row) => {
-      return `<tr>
-        <td>${row.label}</td>
-        <td>${formatUtcTime(row.restStartUtc)}</td>
-        <td>${formatUtcTime(row.restEndUtc)}</td>
-        <td>${formatDeviceTime(row.deviceAlarm)}</td>
-        <td>${formatDuration(row.durationMinutes)}</td>
-      </tr>`;
-    })
-    .join("");
+function formatExtraBuffer(minutes) {
+  return minutes > 0 ? ` and ${minutes} min additional buffer` : "";
 }
 
 function updateDeviceClock() {
@@ -345,16 +346,122 @@ function updateDeviceClock() {
   els.currentUtc.textContent = formatUtcClock(now);
   els.deviceOffset.textContent = formatOffsetForDate(now);
   els.deviceMessage.textContent = "Device alarm times are calculated from the current device clock.";
-  els.deviceMessage.classList.remove("warn");
+}
+
+function hydrateSettingsForm(value) {
+  els.settingsModel.value = value.defaultModel;
+  els.burnModelLabel.value = value.burnModelLabel;
+  els.acModelLabel.value = value.acModelLabel;
+  els.settingsCrew.value = String(value.crewCount);
+  els.settingsBreaks.value = String(value.breaksPerPilot);
+  els.settingsAlarmOffset.value = String(value.alarmOffset);
+  els.rememberInputs.checked = value.rememberInputs;
+  els.settingsClimb.value = String(value.climbModifier);
+  els.settingsDescent.value = String(value.descentModifier);
+  els.settingsBurnBuffer.value = String(value.burnBuffer);
+  els.settingsTocModifier.value = String(value.tocModifier);
+  els.settingsTodModifier.value = String(value.todModifier);
+  els.settingsAcBuffer.value = String(value.acBuffer);
+}
+
+function readSettingsForm() {
+  return normalizeSettings({
+    defaultModel: els.settingsModel.value,
+    burnModelLabel: els.burnModelLabel.value.trim() || DEFAULT_SETTINGS.burnModelLabel,
+    acModelLabel: els.acModelLabel.value.trim() || DEFAULT_SETTINGS.acModelLabel,
+    crewCount: Number(els.settingsCrew.value),
+    breaksPerPilot: Number(els.settingsBreaks.value),
+    alarmOffset: Number(els.settingsAlarmOffset.value),
+    rememberInputs: els.rememberInputs.checked,
+    climbModifier: Number(els.settingsClimb.value),
+    descentModifier: Number(els.settingsDescent.value),
+    burnBuffer: Number(els.settingsBurnBuffer.value),
+    tocModifier: Number(els.settingsTocModifier.value),
+    todModifier: Number(els.settingsTodModifier.value),
+    acBuffer: Number(els.settingsAcBuffer.value)
+  });
+}
+
+function saveSettings() {
+  settings = readSettingsForm();
+  localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+  activeModel = settings.defaultModel;
+  activeBufferOverride = null;
+  actualStartWasManuallyEdited = false;
+  hydrateCalculatorDefaults(false);
+  updateModelUi();
+  renderAndRemember();
+  switchView("calculator");
+  setStatus("Settings saved and applied.");
+}
+
+function restoreDefaultSettings() {
+  settings = { ...DEFAULT_SETTINGS };
+  localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+  localStorage.removeItem(INPUTS_KEY);
+  activeModel = settings.defaultModel;
+  activeBufferOverride = null;
+  actualStartWasManuallyEdited = false;
+  hydrateSettingsForm(settings);
+  hydrateCalculatorDefaults(false);
+  updateModelUi();
+  render();
+  els.settingsStatus.textContent = "Default settings restored.";
+}
+
+function loadSettings() {
+  try {
+    return normalizeSettings({ ...DEFAULT_SETTINGS, ...JSON.parse(localStorage.getItem(SETTINGS_KEY) || "{}") });
+  } catch {
+    return { ...DEFAULT_SETTINGS };
+  }
+}
+
+function normalizeSettings(value) {
+  const bounded = (number, maximum, fallback) => Number.isFinite(number)
+    ? Math.min(Math.max(Math.round(number), 0), maximum)
+    : fallback;
+  return {
+    defaultModel: value.defaultModel === "ac" ? "ac" : "burn",
+    burnModelLabel: String(value.burnModelLabel || DEFAULT_SETTINGS.burnModelLabel).slice(0, 28),
+    acModelLabel: String(value.acModelLabel || DEFAULT_SETTINGS.acModelLabel).slice(0, 28),
+    crewCount: Number(value.crewCount) === 4 ? 4 : 3,
+    breaksPerPilot: Number(value.breaksPerPilot) === 2 ? 2 : 1,
+    alarmOffset: bounded(Number(value.alarmOffset), 59, DEFAULT_SETTINGS.alarmOffset),
+    climbModifier: bounded(Number(value.climbModifier), 120, DEFAULT_SETTINGS.climbModifier),
+    descentModifier: bounded(Number(value.descentModifier), 120, DEFAULT_SETTINGS.descentModifier),
+    burnBuffer: bounded(Number(value.burnBuffer), 120, DEFAULT_SETTINGS.burnBuffer),
+    tocModifier: bounded(Number(value.tocModifier), 120, DEFAULT_SETTINGS.tocModifier),
+    todModifier: bounded(Number(value.todModifier), 120, DEFAULT_SETTINGS.todModifier),
+    acBuffer: bounded(Number(value.acBuffer), 120, DEFAULT_SETTINGS.acBuffer),
+    rememberInputs: value.rememberInputs !== false
+  };
+}
+
+function rememberInputs() {
+  if (!settings.rememberInputs || !latestResult) {
+    if (!settings.rememberInputs) localStorage.removeItem(INPUTS_KEY);
+    return;
+  }
+  localStorage.setItem(INPUTS_KEY, JSON.stringify(buildSharedPayload(latestResult.inputs)));
+}
+
+function restoreRememberedInputs() {
+  try {
+    const payload = JSON.parse(localStorage.getItem(INPUTS_KEY) || "null");
+    if (isValidSharedPayload(payload)) {
+      payload.d = todayUtcIsoDate();
+      applySharedPayload(payload, false);
+    }
+  } catch {
+    localStorage.removeItem(INPUTS_KEY);
+  }
 }
 
 async function copySchedule() {
-  if (!latestResult) {
-    return;
-  }
-  const text = buildScheduleText(latestResult);
+  if (!latestResult) return;
   try {
-    await navigator.clipboard.writeText(text);
+    await navigator.clipboard.writeText(buildPdfLines(latestResult).join("\n"));
     setStatus("Schedule copied.");
   } catch {
     setStatus("Copy is unavailable in this browser.");
@@ -362,29 +469,18 @@ async function copySchedule() {
 }
 
 async function shareAppSchedule() {
-  if (!latestResult) {
-    return;
-  }
-
+  if (!latestResult) return;
   const url = buildSharedScheduleUrl(latestResult.inputs);
-  const shareData = {
-    title: "Pilot Rest Schedule",
-    text: "Open this link to import the rest schedule into Pilot Rest Calculator.",
-    url
-  };
-
+  const shareData = { title: "Pilot Rest Schedule", text: `Open this ${latestResult.inputs.modelLabel} schedule in Pilot Rest Calculator.`, url };
   if (navigator.share) {
     try {
       await navigator.share(shareData);
       setStatus("Share sheet opened. Choose AirDrop to send the app schedule.");
       return;
     } catch (error) {
-      if (error?.name === "AbortError") {
-        return;
-      }
+      if (error?.name === "AbortError") return;
     }
   }
-
   try {
     await navigator.clipboard.writeText(url);
     setStatus("App schedule link copied.");
@@ -394,55 +490,30 @@ async function shareAppSchedule() {
 }
 
 function buildSharedScheduleUrl(inputs) {
-  const payload = {
-    v: SHARED_SCHEDULE_VERSION,
-    d: inputs.flightDate,
-    s: inputs.startMinutes,
-    b: inputs.burnMinutes,
-    c: inputs.crewCount,
-    n: inputs.breaksPerPilot,
-    o1: inputs.firstOverrideMinutes,
-    o2: inputs.secondOverrideMinutes
-  };
   const url = new URL(window.location.href);
   url.search = "";
   url.hash = "";
-  url.searchParams.set("schedule", encodeSharedPayload(payload));
+  url.searchParams.set("schedule", encodeSharedPayload(buildSharedPayload(inputs)));
   return url.toString();
 }
 
+function buildSharedPayload(inputs) {
+  return {
+    v: SHARED_SCHEDULE_VERSION, m: inputs.model, d: inputs.flightDate, s: inputs.startMinutes,
+    b: inputs.burnMinutes, cm: inputs.climbModifierMinutes, dm: inputs.descentModifierMinutes,
+    tc: inputs.estimatedTocMinutes, td: inputs.estimatedTodMinutes, tcm: inputs.tocModifierMinutes,
+    tdm: inputs.todModifierMinutes, x: inputs.extraBufferMinutes, c: inputs.crewCount,
+    n: inputs.breaksPerPilot, o1: inputs.firstOverrideMinutes, o2: inputs.secondOverrideMinutes
+  };
+}
+
 function importSharedSchedule() {
-  const encodedPayload = new URLSearchParams(window.location.search).get("schedule");
-  if (!encodedPayload) {
-    return false;
-  }
-
+  const encoded = new URLSearchParams(window.location.search).get("schedule");
+  if (!encoded) return false;
   try {
-    const payload = decodeSharedPayload(encodedPayload);
-    if (!isValidSharedPayload(payload)) {
-      throw new Error("Invalid shared schedule");
-    }
-
-    activeFlightDate = payload.d;
-    els.startHours.value = String(Math.floor(payload.s / 60));
-    els.startMinutes.value = String(payload.s % 60);
-    els.burnHours.value = String(Math.floor(payload.b / 60));
-    els.burnMinutes.value = String(payload.b % 60);
-    setRadioValue("crewCount", payload.c);
-    setRadioValue("breaksPerPilot", payload.n);
-    setOverridePicker(
-      els.firstOverrideEnabled,
-      els.firstOverrideHours,
-      els.firstOverrideMinutes,
-      payload.o1
-    );
-    setOverridePicker(
-      els.secondOverrideEnabled,
-      els.secondOverrideHours,
-      els.secondOverrideMinutes,
-      payload.o2
-    );
-    updateSecondOverrideVisibility(payload.n);
+    const payload = upgradeSharedPayload(decodeSharedPayload(encoded));
+    if (!isValidSharedPayload(payload)) throw new Error("Invalid payload");
+    applySharedPayload(payload, true);
     return true;
   } catch {
     window.setTimeout(() => setStatus("This shared schedule link is invalid or incomplete."), 0);
@@ -450,94 +521,102 @@ function importSharedSchedule() {
   }
 }
 
-function setOverridePicker(enabledElement, hoursElement, minutesElement, totalMinutes) {
-  enabledElement.checked = totalMinutes !== null;
-  const value = totalMinutes ?? 0;
-  hoursElement.value = String(Math.floor(value / 60));
-  minutesElement.value = String(value % 60);
+function upgradeSharedPayload(payload) {
+  if (payload?.v !== 1) return payload;
+  return {
+    v: SHARED_SCHEDULE_VERSION,
+    m: "burn",
+    d: payload.d,
+    s: payload.s,
+    b: payload.b,
+    cm: settings.climbModifier,
+    dm: settings.descentModifier,
+    tc: 8 * 60 + 55,
+    td: 12 * 60 + 15,
+    tcm: settings.tocModifier,
+    tdm: settings.todModifier,
+    x: settings.burnBuffer,
+    c: payload.c,
+    n: payload.n,
+    o1: payload.o1,
+    o2: payload.o2
+  };
+}
+
+function applySharedPayload(payload, preserveRecipientAlarm) {
+  activeModel = payload.m;
+  activeFlightDate = payload.d;
+  activeBufferOverride = payload.x;
+  actualStartWasManuallyEdited = true;
+  setClockPicker(els.startHours, els.startMinutes, payload.s);
+  setDurationPicker(els.burnHours, els.burnMinutes, payload.b);
+  els.climbModifier.value = String(payload.cm);
+  els.descentModifier.value = String(payload.dm);
+  setClockPicker(els.tocHours, els.tocMinutes, payload.tc);
+  setClockPicker(els.todHours, els.todMinutes, payload.td);
+  els.tocModifier.value = String(payload.tcm);
+  els.todModifier.value = String(payload.tdm);
+  setRadioValue("crewCount", payload.c);
+  setRadioValue("breaksPerPilot", payload.n);
+  setOverridePicker(els.firstOverrideEnabled, els.firstOverrideHours, els.firstOverrideMinutes, payload.o1);
+  setOverridePicker(els.secondOverrideEnabled, els.secondOverrideHours, els.secondOverrideMinutes, payload.o2);
+  updateSecondOverrideVisibility(payload.n);
+  if (!preserveRecipientAlarm) {
+    els.alarmOffset.value = String(settings.alarmOffset);
+  }
+  updateModelUi();
 }
 
 function isValidSharedPayload(payload) {
-  const validDate = /^\d{4}-\d{2}-\d{2}$/.test(payload?.d || "");
-  const validOverride = (value) =>
-    value === null || (Number.isInteger(value) && value >= 0 && value <= 1499);
-  return (
-    payload?.v === SHARED_SCHEDULE_VERSION &&
-    validDate &&
-    Number.isInteger(payload.s) &&
-    payload.s >= 0 &&
-    payload.s < MINUTES_PER_DAY &&
-    Number.isInteger(payload.b) &&
-    payload.b >= 0 &&
-    payload.b <= 1499 &&
-    [3, 4].includes(payload.c) &&
-    [1, 2].includes(payload.n) &&
-    validOverride(payload.o1) &&
-    validOverride(payload.o2) &&
-    (payload.n === 2 || payload.o2 === null)
-  );
+  const minute = (value, maximum = 1499) => Number.isInteger(value) && value >= 0 && value <= maximum;
+  const override = (value) => value === null || minute(value);
+  return payload?.v === SHARED_SCHEDULE_VERSION && ["burn", "ac"].includes(payload.m) &&
+    /^\d{4}-\d{2}-\d{2}$/.test(payload.d || "") && minute(payload.s, 1439) &&
+    minute(payload.b) && minute(payload.cm, 120) && minute(payload.dm, 120) &&
+    minute(payload.tc, 1439) && minute(payload.td, 1439) && minute(payload.tcm, 120) &&
+    minute(payload.tdm, 120) && minute(payload.x, 120) && [3, 4].includes(payload.c) &&
+    [1, 2].includes(payload.n) && override(payload.o1) && override(payload.o2) &&
+    (payload.n === 2 || payload.o2 === null);
 }
 
 function encodeSharedPayload(payload) {
   const bytes = new TextEncoder().encode(JSON.stringify(payload));
   let binary = "";
-  bytes.forEach((byte) => {
-    binary += String.fromCharCode(byte);
-  });
+  bytes.forEach((byte) => { binary += String.fromCharCode(byte); });
   return btoa(binary).replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/, "");
 }
 
-function decodeSharedPayload(encodedPayload) {
-  const base64 = encodedPayload.replaceAll("-", "+").replaceAll("_", "/");
-  const padded = base64.padEnd(Math.ceil(base64.length / 4) * 4, "=");
-  const binary = atob(padded);
-  const bytes = Uint8Array.from(binary, (character) => character.charCodeAt(0));
-  return JSON.parse(new TextDecoder().decode(bytes));
+function decodeSharedPayload(encoded) {
+  const base64 = encoded.replaceAll("-", "+").replaceAll("_", "/");
+  const binary = atob(base64.padEnd(Math.ceil(base64.length / 4) * 4, "="));
+  return JSON.parse(new TextDecoder().decode(Uint8Array.from(binary, (char) => char.charCodeAt(0))));
 }
 
 function downloadPdf() {
-  if (!latestResult) {
-    return;
-  }
-  const file = createPdfFile(latestResult);
-  savePdfFile(file);
+  if (!latestResult) return;
+  savePdfFile(createPdfFile(latestResult));
   setStatus("PDF downloaded.");
 }
 
 async function sharePdf() {
-  if (!latestResult) {
-    return;
-  }
+  if (!latestResult) return;
   const file = createPdfFile(latestResult);
-  const shareData = {
-    title: "Pilot Rest Schedule",
-    text: "Pilot rest schedule PDF",
-    files: [file]
-  };
-
-  if (navigator.canShare?.(shareData)) {
+  const data = { title: "Pilot Rest Schedule", text: `${latestResult.inputs.modelLabel} pilot rest schedule PDF`, files: [file] };
+  if (navigator.canShare?.(data)) {
     try {
-      await navigator.share(shareData);
+      await navigator.share(data);
       setStatus("Share sheet opened.");
+      return;
     } catch (error) {
-      if (error?.name !== "AbortError") {
-        savePdfFile(file);
-        setStatus("Native sharing is unavailable here, so the PDF was downloaded.");
-      }
+      if (error?.name === "AbortError") return;
     }
-    return;
   }
-
   savePdfFile(file);
-  setStatus("This browser cannot share PDF files directly, so the PDF was downloaded.");
+  setStatus("PDF sharing is unavailable here, so the PDF was downloaded.");
 }
 
 function createPdfFile(result) {
-  const lines = buildPdfLines(result);
-  const bytes = buildSimplePdf(lines);
-  return new File([bytes], `pilot-rest-schedule-${todayUtcIsoDate().replaceAll("-", "")}.pdf`, {
-    type: "application/pdf"
-  });
+  return new File([buildSimplePdf(buildPdfLines(result))], `pilot-rest-schedule-${todayUtcIsoDate().replaceAll("-", "")}.pdf`, { type: "application/pdf" });
 }
 
 function savePdfFile(file) {
@@ -552,53 +631,41 @@ function savePdfFile(file) {
 }
 
 function buildPdfLines(result) {
+  const input = result.inputs;
+  const modelLines = input.model === "burn"
+    ? [
+        `Burn time: ${formatDuration(input.burnMinutes)}`,
+        `Climb modifier: -${input.climbModifierMinutes} minutes`,
+        `Descent modifier: -${input.descentModifierMinutes} minutes`
+      ]
+    : [
+        `Estimated TOC: ${formatClockMinutes(input.estimatedTocMinutes)} UTC`,
+        `TOC modifier: +${input.tocModifierMinutes} minutes`,
+        `Estimated TOD: ${formatClockMinutes(input.estimatedTodMinutes)} UTC`,
+        `TOD modifier: -${input.todModifierMinutes} minutes`,
+        `Adjusted window: ${formatClockMinutes(result.adjustedTocMinutes)} to ${formatClockMinutes(result.adjustedTodMinutes)} UTC`
+      ];
   const lines = [
-    "PILOT REST SCHEDULE",
-    "",
-    `Start UTC: ${formatClockMinutes(result.inputs.startMinutes)} UTC`,
-    `Burn time: ${formatDuration(result.inputs.burnMinutes)}`,
-    `Crew: ${result.inputs.crewCount}`,
-    `Breaks per pilot: ${result.inputs.breaksPerPilot}`,
-    `Rest period used: ${result.restPeriodSummary}`,
-    `Device time zone: ${result.inputs.deviceTimeZone} (${formatOffsetForDate(new Date())})`,
-    `Alarm offset: ${formatSignedMinutes(result.inputs.alarmOffsetMinutes)}`,
-    "",
+    "PILOT REST SCHEDULE", "", `Calculation model: ${input.modelLabel}`, ...modelLines,
+    `Additional buffer: -${input.extraBufferMinutes} minutes`, `Usable rest: ${formatDuration(result.usableRestMinutes)}`,
+    `Start UTC: ${formatClockMinutes(input.startMinutes)} UTC`, `Crew: ${input.crewCount}`,
+    `Breaks per pilot: ${input.breaksPerPilot}`, `Rest period used: ${result.restPeriodSummary}`,
+    `Device time zone: ${input.deviceTimeZone} (${formatOffsetForDate(new Date())})`,
+    `Alarm offset: ${input.alarmOffsetMinutes} minutes`, "",
     "Break     Rest Start UTC      Rest End UTC        Device Alarm     Duration",
     "-----     --------------      ------------        ------------     --------"
   ];
-
-  result.rows.forEach((row) => {
-    lines.push(
-      [
-        row.label.padEnd(9),
-        formatUtcTime(row.restStartUtc).padEnd(20),
-        formatUtcTime(row.restEndUtc).padEnd(20),
-        formatDeviceTime(row.deviceAlarm).padEnd(17),
-        formatDuration(row.durationMinutes)
-      ].join("")
-    );
-  });
-
+  result.rows.forEach((row) => lines.push([
+    row.label.padEnd(9), formatUtcTime(row.restStartUtc).padEnd(20),
+    formatUtcTime(row.restEndUtc).padEnd(20), formatDeviceTime(row.deviceAlarm).padEnd(17),
+    formatDuration(row.durationMinutes)
+  ].join("")));
   return lines;
 }
 
-function buildScheduleText(result) {
-  return buildPdfLines(result).join("\n");
-}
-
 function buildSimplePdf(lines) {
-  const escapedLines = lines.map(escapePdfText);
-  const content = [
-    "BT",
-    "/F1 12 Tf",
-    "54 756 Td",
-    "16 TL",
-    ...escapedLines.flatMap((line, index) =>
-      index === 0 ? [`(${line}) Tj`] : ["T*", `(${line}) Tj`]
-    ),
-    "ET"
-  ].join("\n");
-
+  const content = ["BT", "/F1 12 Tf", "54 756 Td", "16 TL", ...lines.map(escapePdfText)
+    .flatMap((line, index) => index === 0 ? [`(${line}) Tj`] : ["T*", `(${line}) Tj`]), "ET"].join("\n");
   const objects = [
     "<< /Type /Catalog /Pages 2 0 R >>",
     "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
@@ -606,21 +673,13 @@ function buildSimplePdf(lines) {
     "<< /Type /Font /Subtype /Type1 /BaseFont /Courier >>",
     `<< /Length ${byteLength(content)} >>\nstream\n${content}\nendstream`
   ];
-
   let pdf = "%PDF-1.4\n";
   const offsets = [0];
-  objects.forEach((object, index) => {
-    offsets.push(byteLength(pdf));
-    pdf += `${index + 1} 0 obj\n${object}\nendobj\n`;
-  });
+  objects.forEach((object, index) => { offsets.push(byteLength(pdf)); pdf += `${index + 1} 0 obj\n${object}\nendobj\n`; });
   const xrefOffset = byteLength(pdf);
-  pdf += `xref\n0 ${objects.length + 1}\n`;
-  pdf += "0000000000 65535 f \n";
-  offsets.slice(1).forEach((offset) => {
-    pdf += `${String(offset).padStart(10, "0")} 00000 n \n`;
-  });
-  pdf += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\n`;
-  pdf += `startxref\n${xrefOffset}\n%%EOF`;
+  pdf += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n`;
+  offsets.slice(1).forEach((offset) => { pdf += `${String(offset).padStart(10, "0")} 00000 n \n`; });
+  pdf += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xrefOffset}\n%%EOF`;
   return new Blob([pdf], { type: "application/pdf" });
 }
 
@@ -628,107 +687,82 @@ function escapePdfText(text) {
   return text.replaceAll("\\", "\\\\").replaceAll("(", "\\(").replaceAll(")", "\\)");
 }
 
+function setOverridePicker(enabled, hours, minutes, totalMinutes) {
+  enabled.checked = totalMinutes !== null;
+  setDurationPicker(hours, minutes, totalMinutes ?? 0);
+}
+
+function getModelLabel(model) {
+  return model === "ac" ? settings.acModelLabel : settings.burnModelLabel;
+}
+
+function setClockPicker(hours, minutes, totalMinutes) {
+  const normalized = normalizeClock(totalMinutes);
+  hours.value = String(Math.floor(normalized / 60));
+  minutes.value = String(normalized % 60);
+}
+
+function setDurationPicker(hours, minutes, totalMinutes) {
+  hours.value = String(Math.floor(totalMinutes / 60));
+  minutes.value = String(totalMinutes % 60);
+}
+
+function getClockMinutes(hours, minutes) {
+  return Number(hours.value) * 60 + Number(minutes.value);
+}
+
+function getDurationMinutes(hours, minutes) {
+  return Number(hours.value) * 60 + Number(minutes.value);
+}
+
+function calculateWindowMinutes(start, end) {
+  const duration = end - start;
+  return duration < 0 ? duration + MINUTES_PER_DAY : duration;
+}
+
+function normalizeClock(minutes) {
+  return ((minutes % MINUTES_PER_DAY) + MINUTES_PER_DAY) % MINUTES_PER_DAY;
+}
+
 function formatDuration(totalMinutes) {
-  if (!Number.isFinite(totalMinutes)) {
-    return "--:--";
-  }
-  const hours = Math.floor(totalMinutes / 60);
-  const minutes = totalMinutes % 60;
-  return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
+  return `${String(Math.floor(totalMinutes / 60)).padStart(2, "0")}:${String(totalMinutes % 60).padStart(2, "0")}`;
 }
 
 function formatClockMinutes(minutes) {
-  const normalized = ((minutes % MINUTES_PER_DAY) + MINUTES_PER_DAY) % MINUTES_PER_DAY;
-  return `${String(Math.floor(normalized / 60)).padStart(2, "0")}:${String(
-    normalized % 60
-  ).padStart(2, "0")}`;
+  const normalized = normalizeClock(minutes);
+  return `${String(Math.floor(normalized / 60)).padStart(2, "0")}:${String(normalized % 60).padStart(2, "0")}`;
 }
 
-function formatUtcTime(date) {
-  return `${formatUtcClock(date)} UTC`;
-}
-
-function formatUtcClock(date) {
-  return `${String(date.getUTCHours()).padStart(2, "0")}:${String(
-    date.getUTCMinutes()
-  ).padStart(2, "0")}`;
-}
-
-function formatDeviceTime(date) {
-  return new Intl.DateTimeFormat("en-US", {
-    hour: "2-digit",
-    minute: "2-digit",
-    hourCycle: "h23",
-    hour12: false
-  }).format(date);
-}
-
+function formatUtcTime(date) { return `${formatUtcClock(date)} UTC`; }
+function formatUtcClock(date) { return `${String(date.getUTCHours()).padStart(2, "0")}:${String(date.getUTCMinutes()).padStart(2, "0")}`; }
+function formatDeviceTime(date) { return new Intl.DateTimeFormat("en-US", { hour: "2-digit", minute: "2-digit", hourCycle: "h23", hour12: false }).format(date); }
 function formatOffsetForDate(date) {
-  const offsetMinutes = -date.getTimezoneOffset();
-  const sign = offsetMinutes >= 0 ? "+" : "-";
-  const absolute = Math.abs(offsetMinutes);
-  const hours = Math.floor(absolute / 60);
-  const minutes = absolute % 60;
-  return `UTC${sign}${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
+  const offset = -date.getTimezoneOffset();
+  const absolute = Math.abs(offset);
+  return `UTC${offset >= 0 ? "+" : "-"}${String(Math.floor(absolute / 60)).padStart(2, "0")}:${String(absolute % 60).padStart(2, "0")}`;
 }
-
-function formatSignedMinutes(minutes) {
-  const sign = minutes > 0 ? "+" : "";
-  return `${sign}${minutes} minutes`;
-}
-
 function dateAndMinutesToUtc(isoDate, minutes) {
   const [year, month, day] = isoDate.split("-").map(Number);
   return new Date(Date.UTC(year, month - 1, day, 0, minutes, 0, 0));
 }
-
-function addMinutes(date, minutes) {
-  return new Date(date.getTime() + minutes * 60000);
-}
-
-function range(start, end) {
-  return Array.from({ length: end - start + 1 }, (_, index) => start + index);
-}
-
+function addMinutes(date, minutes) { return new Date(date.getTime() + minutes * 60000); }
+function range(start, end) { return Array.from({ length: end - start + 1 }, (_, index) => start + index); }
 function setRadioValue(name, value) {
   const radio = document.querySelector(`input[name="${name}"][value="${value}"]`);
-  if (radio) {
-    radio.checked = true;
-  }
+  if (radio) radio.checked = true;
 }
-
-function getRadioValue(name) {
-  return document.querySelector(`input[name="${name}"]:checked`)?.value;
-}
-
-function todayUtcIsoDate() {
-  return new Date().toISOString().slice(0, 10);
-}
-
-function getDeviceTimeZone() {
-  return Intl.DateTimeFormat().resolvedOptions().timeZone || "Device local time";
-}
-
-function byteLength(text) {
-  return new TextEncoder().encode(text).length;
-}
-
-function setStatus(message) {
-  els.shareStatus.textContent = message;
-}
+function getRadioValue(name) { return document.querySelector(`input[name="${name}"]:checked`)?.value; }
+function todayUtcIsoDate() { return new Date().toISOString().slice(0, 10); }
+function getDeviceTimeZone() { return Intl.DateTimeFormat().resolvedOptions().timeZone || "Device local time"; }
+function byteLength(text) { return new TextEncoder().encode(text).length; }
+function setStatus(message) { els.shareStatus.textContent = message; }
 
 function registerServiceWorker() {
   if (!("serviceWorker" in navigator)) {
     els.installStatus.textContent = "Browser cache only";
     return;
   }
-
-  navigator.serviceWorker
-    .register("./sw.js")
-    .then(() => {
-      els.installStatus.textContent = "Offline ready";
-    })
-    .catch(() => {
-      els.installStatus.textContent = "Online only";
-    });
+  navigator.serviceWorker.register("./sw.js")
+    .then(() => { els.installStatus.textContent = "Offline ready"; })
+    .catch(() => { els.installStatus.textContent = "Online only"; });
 }

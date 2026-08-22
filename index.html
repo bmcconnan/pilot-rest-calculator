@@ -9,215 +9,221 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <link rel="manifest" href="./manifest.webmanifest" />
     <link rel="apple-touch-icon" href="./icon-512.png" />
-    <link rel="stylesheet" href="./pilot-rest-v1-break-overrides-styles.css?v=20260822-4" />
+    <link rel="stylesheet" href="./pilot-rest-v1-break-overrides-styles.css?v=20260822-5" />
     <title>Pilot Rest Calculator</title>
   </head>
   <body>
     <main class="app-shell">
-      <section class="header-band">
-        <div>
-          <p class="eyebrow">Crew rest planning</p>
-          <h1>Pilot Rest Calculator</h1>
+      <header class="header-band">
+        <div class="brand-lockup">
+          <img class="brand-logo" src="./icon-192.png" alt="" aria-hidden="true" />
+          <div>
+            <p class="eyebrow">Crew rest planning</p>
+            <h1>Pilot Rest Calculator</h1>
+          </div>
         </div>
         <div class="status-pill" id="installStatus">Offline ready</div>
-      </section>
+      </header>
 
-      <section class="workspace-grid">
-        <form class="input-panel" id="calculatorForm">
-          <div class="panel-heading">
-            <h2>Inputs</h2>
-            <button class="reset-button" type="button" id="resetButton" title="RESET ALL" aria-label="RESET ALL">
-              RESET ALL
-            </button>
-          </div>
+      <nav class="view-tabs" aria-label="App sections">
+        <button class="view-tab is-active" type="button" data-view="calculator" aria-selected="true">Calculator</button>
+        <button class="view-tab" type="button" data-view="settings" aria-selected="false">Settings</button>
+      </nav>
 
-          <div class="segmented-field">
-            <span>Burn time</span>
-            <div class="duration-picker" aria-label="Burn time">
-              <label>
-                <span>Hours</span>
-                <select id="burnHours" aria-label="Burn hours"></select>
-              </label>
-              <label>
-                <span>Minutes</span>
-                <select id="burnMinutes" aria-label="Burn minutes"></select>
-              </label>
-            </div>
-          </div>
-
-          <div class="segmented-field">
-            <span>Number of crew</span>
-            <div class="segmented-control" role="radiogroup" aria-label="Number of crew">
-              <label>
-                <input type="radio" name="crewCount" value="3" checked />
-                <span>3</span>
-              </label>
-              <label>
-                <input type="radio" name="crewCount" value="4" />
-                <span>4</span>
-              </label>
-            </div>
-          </div>
-
-          <div class="segmented-field">
-            <span>Breaks per pilot</span>
-            <div class="segmented-control" role="radiogroup" aria-label="Breaks per pilot">
-              <label>
-                <input type="radio" name="breaksPerPilot" value="1" checked />
-                <span>1</span>
-              </label>
-              <label>
-                <input type="radio" name="breaksPerPilot" value="2" />
-                <span>2</span>
-              </label>
-            </div>
-          </div>
-
-          <div class="override-stack">
-            <div class="override-panel">
-              <label class="check-row">
-                <input id="firstOverrideEnabled" type="checkbox" />
-                <span>Manual rest override</span>
-              </label>
-              <div class="duration-picker" aria-label="Manual rest override">
-                <label>
-                  <span>Hours</span>
-                  <select id="firstOverrideHours" aria-label="Manual override hours"></select>
-                </label>
-                <label>
-                  <span>Minutes</span>
-                  <select id="firstOverrideMinutes" aria-label="Manual override minutes"></select>
-                </label>
-              </div>
-            </div>
-
-            <div class="override-panel is-hidden" id="secondOverridePanel">
-              <label class="check-row">
-                <input id="secondOverrideEnabled" type="checkbox" />
-                <span>Manual rest 2nd break</span>
-              </label>
-              <div class="duration-picker" aria-label="Manual rest second break">
-                <label>
-                  <span>Hours</span>
-                  <select id="secondOverrideHours" aria-label="Second break override hours"></select>
-                </label>
-                <label>
-                  <span>Minutes</span>
-                  <select id="secondOverrideMinutes" aria-label="Second break override minutes"></select>
-                </label>
-              </div>
-            </div>
-          </div>
-
-          <div class="inline-field-row">
-            <div class="segmented-field">
-              <span>Start time UTC</span>
-              <div class="duration-picker" aria-label="Start time UTC">
-                <label>
-                  <span>Hours</span>
-                  <select id="startHours" aria-label="Start hours"></select>
-                </label>
-                <label>
-                  <span>Minutes</span>
-                  <select id="startMinutes" aria-label="Start minutes"></select>
-                </label>
-              </div>
-            </div>
-
-            <button class="start-now-button" type="button" id="startNowButton">Start Now</button>
-          </div>
-        </form>
-
-        <section class="summary-panel" aria-live="polite">
-          <div class="summary-heading">
-            <h2>Rest Summary</h2>
-          </div>
-
-          <div class="metric-strip">
-            <div>
-              <span>Usable rest</span>
-              <strong id="usableRest">--:--</strong>
-            </div>
-            <div>
-              <span>Total per pilot</span>
-              <strong id="totalPerPilot">--:--</strong>
-            </div>
-            <div>
-              <span>Rest period</span>
-              <strong id="periodUsed">--:--</strong>
-            </div>
-            <div>
-              <span>Slots</span>
-              <strong id="slotCount">0</strong>
-            </div>
-          </div>
-
-          <div class="device-check">
-            <div class="panel-heading">
-              <h2>Device Time</h2>
-            </div>
-            <div class="device-grid">
-              <div class="time-readout">
-                <span>Device clock</span>
-                <strong id="deviceClock">--:--</strong>
-              </div>
-              <div class="time-readout">
-                <span>Current UTC</span>
-                <strong id="currentUtc">--:--</strong>
-              </div>
-              <div class="time-readout">
-                <span>Device UTC offset</span>
-                <strong id="deviceOffset">--:--</strong>
-              </div>
-            </div>
-            <p class="check-message" id="deviceMessage"></p>
-            <div class="alarm-offset-panel">
-              <div class="alarm-offset-copy">
-                <h3>Alarm Offset</h3>
-                <p>Adjust the offset to change your device alarm time</p>
-              </div>
-              <label class="alarm-offset-picker">
-                <span>Minutes</span>
-                <select id="alarmOffset" aria-label="Alarm offset minutes"></select>
-              </label>
-            </div>
-          </div>
-        </section>
-      </section>
-
-      <section class="schedule-section">
-        <div class="table-toolbar">
+      <div id="calculatorView" class="app-view">
+        <div class="active-model-bar">
           <div>
-            <h2>Rest Schedule</h2>
-            <p id="scheduleContext"></p>
+            <span>Active calculation model</span>
+            <strong id="activeModelName">Burn Time</strong>
           </div>
-          <div class="action-row">
-            <button type="button" id="copyButton">Copy</button>
-            <button type="button" id="shareAppButton" class="primary-button">Share to App</button>
-            <button type="button" id="downloadButton">Download PDF</button>
-            <button type="button" id="shareButton">Share PDF</button>
+          <button type="button" id="openSettingsButton">Change Model</button>
+        </div>
+
+        <section class="workspace-grid">
+          <form class="input-panel" id="calculatorForm">
+            <div class="panel-heading">
+              <h2>Inputs</h2>
+              <button class="reset-button" type="button" id="resetButton" title="RESET ALL" aria-label="RESET ALL">RESET ALL</button>
+            </div>
+
+            <div id="burnModelFields" class="model-fields">
+              <div class="segmented-field">
+                <span>Burn time</span>
+                <div class="duration-picker" aria-label="Burn time">
+                  <label><span>Hours</span><select id="burnHours" aria-label="Burn hours"></select></label>
+                  <label><span>Minutes</span><select id="burnMinutes" aria-label="Burn minutes"></select></label>
+                </div>
+              </div>
+              <div class="modifier-row">
+                <label><span>Climb</span><select id="climbModifier" aria-label="Climb modifier minutes"></select></label>
+                <label><span>Descent</span><select id="descentModifier" aria-label="Descent modifier minutes"></select></label>
+              </div>
+            </div>
+
+            <div id="acModelFields" class="model-fields is-hidden">
+              <div class="clock-pair-row">
+                <div class="segmented-field">
+                  <span>Estimated TOC</span>
+                  <div class="duration-picker" aria-label="Estimated TOC">
+                    <label><span>Hours</span><select id="tocHours" aria-label="TOC hours"></select></label>
+                    <label><span>Minutes</span><select id="tocMinutes" aria-label="TOC minutes"></select></label>
+                  </div>
+                </div>
+                <div class="segmented-field">
+                  <span>Estimated TOD</span>
+                  <div class="duration-picker" aria-label="Estimated TOD">
+                    <label><span>Hours</span><select id="todHours" aria-label="TOD hours"></select></label>
+                    <label><span>Minutes</span><select id="todMinutes" aria-label="TOD minutes"></select></label>
+                  </div>
+                </div>
+              </div>
+              <div class="modifier-row">
+                <label><span>TOC +</span><select id="tocModifier" aria-label="TOC modifier minutes"></select></label>
+                <label><span>TOD -</span><select id="todModifier" aria-label="TOD modifier minutes"></select></label>
+              </div>
+            </div>
+
+            <div class="segmented-field">
+              <span>Number of crew</span>
+              <div class="segmented-control" role="radiogroup" aria-label="Number of crew">
+                <label><input type="radio" name="crewCount" value="3" checked /><span>3</span></label>
+                <label><input type="radio" name="crewCount" value="4" /><span>4</span></label>
+              </div>
+            </div>
+
+            <div class="segmented-field">
+              <span>Breaks per pilot</span>
+              <div class="segmented-control" role="radiogroup" aria-label="Breaks per pilot">
+                <label><input type="radio" name="breaksPerPilot" value="1" checked /><span>1</span></label>
+                <label><input type="radio" name="breaksPerPilot" value="2" /><span>2</span></label>
+              </div>
+            </div>
+
+            <div class="override-stack">
+              <div class="override-panel">
+                <label class="check-row"><input id="firstOverrideEnabled" type="checkbox" /><span>Manual rest override</span></label>
+                <div class="duration-picker" aria-label="Manual rest override">
+                  <label><span>Hours</span><select id="firstOverrideHours" aria-label="Manual override hours"></select></label>
+                  <label><span>Minutes</span><select id="firstOverrideMinutes" aria-label="Manual override minutes"></select></label>
+                </div>
+              </div>
+              <div class="override-panel is-hidden" id="secondOverridePanel">
+                <label class="check-row"><input id="secondOverrideEnabled" type="checkbox" /><span>Manual rest 2nd break</span></label>
+                <div class="duration-picker" aria-label="Manual rest second break">
+                  <label><span>Hours</span><select id="secondOverrideHours" aria-label="Second break override hours"></select></label>
+                  <label><span>Minutes</span><select id="secondOverrideMinutes" aria-label="Second break override minutes"></select></label>
+                </div>
+              </div>
+            </div>
+
+            <div class="inline-field-row">
+              <div class="segmented-field">
+                <span id="startTimeLabel">Start time UTC</span>
+                <div class="duration-picker" aria-label="Start time UTC">
+                  <label><span>Hours</span><select id="startHours" aria-label="Start hours"></select></label>
+                  <label><span>Minutes</span><select id="startMinutes" aria-label="Start minutes"></select></label>
+                </div>
+              </div>
+              <button class="start-now-button" type="button" id="startNowButton">Start Now</button>
+            </div>
+          </form>
+
+          <section class="summary-panel" aria-live="polite">
+            <div class="summary-heading"><h2>Rest Summary</h2></div>
+            <div class="metric-strip">
+              <div><span>Usable rest</span><strong id="usableRest">--:--</strong></div>
+              <div><span>Total per pilot</span><strong id="totalPerPilot">--:--</strong></div>
+              <div><span>Rest period</span><strong id="periodUsed">--:--</strong></div>
+              <div><span>Slots</span><strong id="slotCount">0</strong></div>
+            </div>
+
+            <div class="device-check">
+              <div class="panel-heading"><h2>Device Time</h2></div>
+              <div class="device-grid">
+                <div class="time-readout"><span>Device clock</span><strong id="deviceClock">--:--</strong></div>
+                <div class="time-readout"><span>Current UTC</span><strong id="currentUtc">--:--</strong></div>
+                <div class="time-readout"><span>Device UTC offset</span><strong id="deviceOffset">--:--</strong></div>
+              </div>
+              <p class="check-message" id="deviceMessage"></p>
+              <div class="alarm-offset-panel">
+                <div class="alarm-offset-copy"><h3>Alarm Offset</h3><p>Adjust the offset to change your device alarm time</p></div>
+                <label class="alarm-offset-picker"><span>Minutes</span><select id="alarmOffset" aria-label="Alarm offset minutes"></select></label>
+              </div>
+            </div>
+          </section>
+        </section>
+
+        <section class="schedule-section">
+          <div class="table-toolbar">
+            <div><h2>Rest Schedule</h2><p id="scheduleContext"></p></div>
+            <div class="action-row">
+              <button type="button" id="copyButton">Copy</button>
+              <button type="button" id="shareAppButton" class="primary-button">Share to App</button>
+              <button type="button" id="downloadButton">Download PDF</button>
+              <button type="button" id="shareButton">Share PDF</button>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Break</th><th>Rest Start UTC</th><th>Rest End UTC</th><th>Device Alarm</th><th>Duration</th></tr></thead>
+              <tbody id="scheduleBody"></tbody>
+            </table>
+          </div>
+          <p class="share-status" id="shareStatus" role="status"></p>
+        </section>
+      </div>
+
+      <section id="settingsView" class="app-view settings-view is-hidden" aria-labelledby="settingsTitle">
+        <div class="settings-heading">
+          <div><p class="eyebrow">Device preferences</p><h2 id="settingsTitle">Calculator Settings</h2></div>
+          <div class="settings-actions">
+            <button type="button" id="resetSettingsButton">Restore Defaults</button>
+            <button type="button" id="saveSettingsButton" class="primary-button">Save Settings</button>
           </div>
         </div>
 
-        <div class="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Break</th>
-                <th>Rest Start UTC</th>
-                <th>Rest End UTC</th>
-                <th>Device Alarm</th>
-                <th>Duration</th>
-              </tr>
-            </thead>
-            <tbody id="scheduleBody"></tbody>
-          </table>
-        </div>
+        <form id="settingsForm" class="settings-form">
+          <fieldset>
+            <legend>Calculation Model</legend>
+            <div class="settings-grid">
+              <label><span>Default model</span><select id="settingsModel"><option value="burn">Burn Time</option><option value="ac">TOC / TOD (AC)</option></select></label>
+              <label><span>Burn model name</span><input id="burnModelLabel" type="text" maxlength="28" /></label>
+              <label><span>AC model name</span><input id="acModelLabel" type="text" maxlength="28" /></label>
+            </div>
+          </fieldset>
 
-        <p class="share-status" id="shareStatus" role="status"></p>
+          <fieldset>
+            <legend>Default Schedule</legend>
+            <div class="settings-grid">
+              <label><span>Number of crew</span><select id="settingsCrew"><option value="3">3</option><option value="4">4</option></select></label>
+              <label><span>Breaks per pilot</span><select id="settingsBreaks"><option value="1">1</option><option value="2">2</option></select></label>
+              <label><span>Alarm offset</span><select id="settingsAlarmOffset"></select></label>
+              <label class="toggle-row"><input id="rememberInputs" type="checkbox" /><span>Remember last-used inputs</span></label>
+            </div>
+          </fieldset>
+
+          <fieldset>
+            <legend>Burn Time Model</legend>
+            <div class="settings-grid">
+              <label><span>Climb modifier</span><select id="settingsClimb"></select></label>
+              <label><span>Descent modifier</span><select id="settingsDescent"></select></label>
+              <label><span>Additional rest buffer</span><select id="settingsBurnBuffer"></select></label>
+            </div>
+          </fieldset>
+
+          <fieldset>
+            <legend>TOC / TOD Model</legend>
+            <div class="settings-grid">
+              <label><span>TOC + modifier</span><select id="settingsTocModifier"></select></label>
+              <label><span>TOD - modifier</span><select id="settingsTodModifier"></select></label>
+              <label><span>Additional rest buffer</span><select id="settingsAcBuffer"></select></label>
+            </div>
+          </fieldset>
+        </form>
+        <p class="settings-status" id="settingsStatus" role="status"></p>
       </section>
     </main>
 
-    <script src="./pilot-rest-v1-break-overrides-app.js?v=20260822-6" defer></script>
+    <script src="./pilot-rest-v1-break-overrides-app.js?v=20260822-7" defer></script>
   </body>
 </html>

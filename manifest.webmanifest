@@ -1,7 +1,7 @@
 {
   "name": "Pilot Rest Calculator",
   "short_name": "Pilot Rest",
-  "description": "Calculate crew rest periods and share a PDF schedule.",
+  "description": "Calculate pilot rest using Burn Time or TOC/TOD models and share schedules.",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",
