@@ -64,6 +64,7 @@ init();
 function init() {
   populateStartTimePickers();
   populateDurationPickers();
+  populateAlarmOffsetPicker();
   hydrateDefaults(INITIAL_DEFAULTS);
   bindEvents();
   registerServiceWorker();
@@ -95,6 +96,15 @@ function populateDurationPicker(hoursElement, minutesElement) {
     .join("");
 }
 
+function populateAlarmOffsetPicker() {
+  els.alarmOffset.innerHTML = range(0, 59)
+    .map((minute) => {
+      const label = minute === 0 ? "0" : `-${String(minute).padStart(2, "0")}`;
+      return `<option value="${minute}">${label}</option>`;
+    })
+    .join("");
+}
+
 function hydrateDefaults(defaults) {
   els.startHours.value = String(defaults.startHours);
   els.startMinutes.value = String(defaults.startMinutes);
@@ -106,7 +116,7 @@ function hydrateDefaults(defaults) {
   els.secondOverrideEnabled.checked = defaults.secondOverrideEnabled;
   els.secondOverrideHours.value = String(defaults.secondOverrideHours);
   els.secondOverrideMinutes.value = String(defaults.secondOverrideMinutes);
-  els.alarmOffset.value = String(defaults.alarmOffset);
+  els.alarmOffset.value = String(Math.abs(defaults.alarmOffset));
   setRadioValue("crewCount", defaults.crewCount);
   setRadioValue("breaksPerPilot", defaults.breaksPerPilot);
   updateSecondOverrideVisibility(defaults.breaksPerPilot);
@@ -175,7 +185,7 @@ function readInputs() {
       els.secondOverrideEnabled.checked && Number(getRadioValue("breaksPerPilot")) === 2
         ? secondOverrideMinutes
         : null,
-    alarmOffsetMinutes: Number(els.alarmOffset.value || 0),
+    alarmOffsetMinutes: -Math.abs(Number(els.alarmOffset.value || 0)),
     deviceTimeZone: getDeviceTimeZone()
   };
 }

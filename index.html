@@ -9,7 +9,7 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <link rel="manifest" href="./manifest.webmanifest" />
     <link rel="apple-touch-icon" href="./icon-512.png" />
-    <link rel="stylesheet" href="./pilot-rest-v1-break-overrides-styles.css?v=20260822-2" />
+    <link rel="stylesheet" href="./pilot-rest-v1-break-overrides-styles.css?v=20260822-3" />
     <title>Pilot Rest Calculator</title>
   </head>
   <body>
@@ -167,10 +167,16 @@
               </div>
             </div>
             <p class="check-message" id="deviceMessage"></p>
-            <label class="device-setting">
-              <span>Alarm offset minutes</span>
-              <input id="alarmOffset" type="number" value="-15" step="1" />
-            </label>
+            <div class="alarm-offset-panel">
+              <div class="alarm-offset-copy">
+                <h3>Alarm Offset</h3>
+                <p>Adjust the offset to change your device alarm time</p>
+              </div>
+              <label class="alarm-offset-picker">
+                <span>Minutes</span>
+                <select id="alarmOffset" aria-label="Alarm offset minutes"></select>
+              </label>
+            </div>
           </div>
         </section>
       </section>
@@ -207,6 +213,6 @@
       </section>
     </main>
 
-    <script src="./pilot-rest-v1-break-overrides-app.js?v=20260822-3" defer></script>
+    <script src="./pilot-rest-v1-break-overrides-app.js?v=20260822-4" defer></script>
   </body>
 </html>

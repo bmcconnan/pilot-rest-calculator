@@ -85,6 +85,7 @@ select:focus-visible {
 
 h1,
 h2,
+h3,
 p {
   margin: 0;
 }
@@ -325,8 +326,36 @@ select {
   gap: 10px;
 }
 
-.device-setting {
-  max-width: 220px;
+.alarm-offset-panel {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(110px, 150px);
+  align-items: end;
+  gap: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #141819;
+  padding: 14px;
+}
+
+.alarm-offset-copy {
+  display: grid;
+  gap: 4px;
+}
+
+.alarm-offset-copy h3 {
+  color: var(--ink);
+  font-size: 1.2rem;
+  line-height: 1.1;
+}
+
+.alarm-offset-copy p {
+  color: var(--muted);
+  font-size: 0.88rem;
+  line-height: 1.35;
+}
+
+.alarm-offset-picker {
+  min-width: 0;
 }
 
 .check-message {
@@ -444,7 +473,8 @@ tbody tr:last-child td {
 @media (max-width: 520px) {
   .metric-strip,
   .device-grid,
-  .inline-field-row {
+  .inline-field-row,
+  .alarm-offset-panel {
     grid-template-columns: 1fr;
   }
 
