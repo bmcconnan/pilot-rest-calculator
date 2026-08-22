@@ -24,10 +24,9 @@ const els = Object.fromEntries(
   [
     "calculatorView", "settingsView", "calculatorForm", "settingsForm", "burnModelFields",
     "acModelFields", "activeModelName", "startTimeLabel", "burnHours", "burnMinutes",
-    "climbModifier", "descentModifier", "tocHours", "tocMinutes", "todHours", "todMinutes",
-    "tocModifier", "todModifier", "startHours", "startMinutes", "firstOverrideEnabled",
+    "tocHours", "tocMinutes", "todHours", "todMinutes", "startHours", "startMinutes", "firstOverrideEnabled",
     "firstOverrideHours", "firstOverrideMinutes", "secondOverridePanel", "secondOverrideEnabled",
-    "secondOverrideHours", "secondOverrideMinutes", "alarmOffset", "currentUtc", "deviceClock",
+    "secondOverrideHours", "secondOverrideMinutes", "currentUtc", "deviceClock",
     "deviceOffset", "deviceMessage", "usableRest", "totalPerPilot", "periodUsed", "slotCount",
     "scheduleContext", "scheduleBody", "shareStatus", "installStatus", "copyButton",
     "shareAppButton", "downloadButton", "shareButton", "resetButton", "startNowButton",
@@ -42,6 +41,7 @@ let settings = loadSettings();
 let activeModel = settings.defaultModel;
 let activeFlightDate = todayUtcIsoDate();
 let activeBufferOverride = null;
+let activeModifierOverride = null;
 let actualStartWasManuallyEdited = false;
 let latestResult = null;
 
@@ -77,17 +77,12 @@ function populatePickers() {
     [els.secondOverrideHours, els.secondOverrideMinutes]
   ].forEach(([hours, minutes]) => populateDurationPicker(hours, minutes));
 
-  populateMinutePicker(els.climbModifier, 120);
-  populateMinutePicker(els.descentModifier, 120);
-  populateMinutePicker(els.tocModifier, 120);
-  populateMinutePicker(els.todModifier, 120);
   populateMinutePicker(els.settingsClimb, 120);
   populateMinutePicker(els.settingsDescent, 120);
   populateMinutePicker(els.settingsBurnBuffer, 120);
   populateMinutePicker(els.settingsTocModifier, 120);
   populateMinutePicker(els.settingsTodModifier, 120);
   populateMinutePicker(els.settingsAcBuffer, 120);
-  populateAlarmPicker(els.alarmOffset);
   populateAlarmPicker(els.settingsAlarmOffset);
 }
 
@@ -140,6 +135,7 @@ function bindEvents() {
   els.resetButton.addEventListener("click", () => {
     activeFlightDate = todayUtcIsoDate();
     activeBufferOverride = null;
+    activeModifierOverride = null;
     actualStartWasManuallyEdited = false;
     hydrateCalculatorDefaults(true);
     renderAndRemember();
@@ -170,7 +166,7 @@ function handleCalculatorChange(event) {
   if (
     activeModel === "ac" &&
     !actualStartWasManuallyEdited &&
-    [els.tocHours, els.tocMinutes, els.tocModifier].includes(event.target)
+    [els.tocHours, els.tocMinutes].includes(event.target)
   ) {
     syncActualStartToAdjustedToc();
   }
@@ -183,11 +179,6 @@ function hydrateCalculatorDefaults(resetToZero) {
   setDurationPicker(els.burnHours, els.burnMinutes, resetToZero ? 0 : 9 * 60);
   setClockPicker(els.tocHours, els.tocMinutes, resetToZero ? 0 : 8 * 60 + 55);
   setClockPicker(els.todHours, els.todMinutes, resetToZero ? 0 : 12 * 60 + 15);
-  els.climbModifier.value = String(settings.climbModifier);
-  els.descentModifier.value = String(settings.descentModifier);
-  els.tocModifier.value = String(settings.tocModifier);
-  els.todModifier.value = String(settings.todModifier);
-  els.alarmOffset.value = String(settings.alarmOffset);
   setRadioValue("crewCount", settings.crewCount);
   setRadioValue("breaksPerPilot", settings.breaksPerPilot);
   setOverridePicker(els.firstOverrideEnabled, els.firstOverrideHours, els.firstOverrideMinutes, null);
@@ -212,7 +203,7 @@ function syncActualStartToAdjustedToc() {
   setClockPicker(
     els.startHours,
     els.startMinutes,
-    getClockMinutes(els.tocHours, els.tocMinutes) + Number(els.tocModifier.value || 0)
+    getClockMinutes(els.tocHours, els.tocMinutes) + getCalculationModifiers().toc
   );
 }
 
@@ -233,18 +224,19 @@ function updateSecondOverrideVisibility(breaksPerPilot) {
 
 function readInputs() {
   const modelBuffer = activeModel === "burn" ? settings.burnBuffer : settings.acBuffer;
+  const modifiers = getCalculationModifiers();
   return {
     model: activeModel,
     modelLabel: getModelLabel(activeModel),
     flightDate: activeFlightDate,
     startMinutes: getClockMinutes(els.startHours, els.startMinutes),
     burnMinutes: getDurationMinutes(els.burnHours, els.burnMinutes),
-    climbModifierMinutes: Number(els.climbModifier.value),
-    descentModifierMinutes: Number(els.descentModifier.value),
+    climbModifierMinutes: modifiers.climb,
+    descentModifierMinutes: modifiers.descent,
     estimatedTocMinutes: getClockMinutes(els.tocHours, els.tocMinutes),
     estimatedTodMinutes: getClockMinutes(els.todHours, els.todMinutes),
-    tocModifierMinutes: Number(els.tocModifier.value),
-    todModifierMinutes: Number(els.todModifier.value),
+    tocModifierMinutes: modifiers.toc,
+    todModifierMinutes: modifiers.tod,
     extraBufferMinutes: activeBufferOverride ?? modelBuffer,
     crewCount: Number(getRadioValue("crewCount")),
     breaksPerPilot: Number(getRadioValue("breaksPerPilot")),
@@ -255,8 +247,17 @@ function readInputs() {
       els.secondOverrideEnabled.checked && Number(getRadioValue("breaksPerPilot")) === 2
         ? getDurationMinutes(els.secondOverrideHours, els.secondOverrideMinutes)
         : null,
-    alarmOffsetMinutes: -Math.abs(Number(els.alarmOffset.value || 0)),
+    alarmOffsetMinutes: -Math.abs(settings.alarmOffset),
     deviceTimeZone: getDeviceTimeZone()
+  };
+}
+
+function getCalculationModifiers() {
+  return activeModifierOverride ?? {
+    climb: settings.climbModifier,
+    descent: settings.descentModifier,
+    toc: settings.tocModifier,
+    tod: settings.todModifier
   };
 }
 
@@ -387,6 +388,7 @@ function saveSettings() {
   localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
   activeModel = settings.defaultModel;
   activeBufferOverride = null;
+  activeModifierOverride = null;
   actualStartWasManuallyEdited = false;
   hydrateCalculatorDefaults(false);
   updateModelUi();
@@ -401,6 +403,7 @@ function restoreDefaultSettings() {
   localStorage.removeItem(INPUTS_KEY);
   activeModel = settings.defaultModel;
   activeBufferOverride = null;
+  activeModifierOverride = null;
   actualStartWasManuallyEdited = false;
   hydrateSettingsForm(settings);
   hydrateCalculatorDefaults(false);
@@ -451,7 +454,7 @@ function restoreRememberedInputs() {
     const payload = JSON.parse(localStorage.getItem(INPUTS_KEY) || "null");
     if (isValidSharedPayload(payload)) {
       payload.d = todayUtcIsoDate();
-      applySharedPayload(payload, false);
+      applySharedPayload(payload);
     }
   } catch {
     localStorage.removeItem(INPUTS_KEY);
@@ -513,7 +516,7 @@ function importSharedSchedule() {
   try {
     const payload = upgradeSharedPayload(decodeSharedPayload(encoded));
     if (!isValidSharedPayload(payload)) throw new Error("Invalid payload");
-    applySharedPayload(payload, true);
+    applySharedPayload(payload);
     return true;
   } catch {
     window.setTimeout(() => setStatus("This shared schedule link is invalid or incomplete."), 0);
@@ -529,8 +532,8 @@ function upgradeSharedPayload(payload) {
     d: payload.d,
     s: payload.s,
     b: payload.b,
-    cm: settings.climbModifier,
-    dm: settings.descentModifier,
+    cm: 20,
+    dm: 40,
     tc: 8 * 60 + 55,
     td: 12 * 60 + 15,
     tcm: settings.tocModifier,
@@ -543,27 +546,26 @@ function upgradeSharedPayload(payload) {
   };
 }
 
-function applySharedPayload(payload, preserveRecipientAlarm) {
+function applySharedPayload(payload) {
   activeModel = payload.m;
   activeFlightDate = payload.d;
   activeBufferOverride = payload.x;
+  activeModifierOverride = {
+    climb: payload.cm,
+    descent: payload.dm,
+    toc: payload.tcm,
+    tod: payload.tdm
+  };
   actualStartWasManuallyEdited = true;
   setClockPicker(els.startHours, els.startMinutes, payload.s);
   setDurationPicker(els.burnHours, els.burnMinutes, payload.b);
-  els.climbModifier.value = String(payload.cm);
-  els.descentModifier.value = String(payload.dm);
   setClockPicker(els.tocHours, els.tocMinutes, payload.tc);
   setClockPicker(els.todHours, els.todMinutes, payload.td);
-  els.tocModifier.value = String(payload.tcm);
-  els.todModifier.value = String(payload.tdm);
   setRadioValue("crewCount", payload.c);
   setRadioValue("breaksPerPilot", payload.n);
   setOverridePicker(els.firstOverrideEnabled, els.firstOverrideHours, els.firstOverrideMinutes, payload.o1);
   setOverridePicker(els.secondOverrideEnabled, els.secondOverrideHours, els.secondOverrideMinutes, payload.o2);
   updateSecondOverrideVisibility(payload.n);
-  if (!preserveRecipientAlarm) {
-    els.alarmOffset.value = String(settings.alarmOffset);
-  }
   updateModelUi();
 }
 

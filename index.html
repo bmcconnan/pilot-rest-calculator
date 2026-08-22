@@ -9,7 +9,7 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <link rel="manifest" href="./manifest.webmanifest" />
     <link rel="apple-touch-icon" href="./icon-512.png" />
-    <link rel="stylesheet" href="./pilot-rest-v1-break-overrides-styles.css?v=20260822-5" />
+    <link rel="stylesheet" href="./pilot-rest-v1-break-overrides-styles.css?v=20260822-6" />
     <title>Pilot Rest Calculator</title>
   </head>
   <body>
@@ -54,10 +54,6 @@
                   <label><span>Minutes</span><select id="burnMinutes" aria-label="Burn minutes"></select></label>
                 </div>
               </div>
-              <div class="modifier-row">
-                <label><span>Climb</span><select id="climbModifier" aria-label="Climb modifier minutes"></select></label>
-                <label><span>Descent</span><select id="descentModifier" aria-label="Descent modifier minutes"></select></label>
-              </div>
             </div>
 
             <div id="acModelFields" class="model-fields is-hidden">
@@ -76,10 +72,6 @@
                     <label><span>Minutes</span><select id="todMinutes" aria-label="TOD minutes"></select></label>
                   </div>
                 </div>
-              </div>
-              <div class="modifier-row">
-                <label><span>TOC +</span><select id="tocModifier" aria-label="TOC modifier minutes"></select></label>
-                <label><span>TOD -</span><select id="todModifier" aria-label="TOD modifier minutes"></select></label>
               </div>
             </div>
 
@@ -145,10 +137,6 @@
                 <div class="time-readout"><span>Device UTC offset</span><strong id="deviceOffset">--:--</strong></div>
               </div>
               <p class="check-message" id="deviceMessage"></p>
-              <div class="alarm-offset-panel">
-                <div class="alarm-offset-copy"><h3>Alarm Offset</h3><p>Adjust the offset to change your device alarm time</p></div>
-                <label class="alarm-offset-picker"><span>Minutes</span><select id="alarmOffset" aria-label="Alarm offset minutes"></select></label>
-              </div>
             </div>
           </section>
         </section>
@@ -224,6 +212,6 @@
       </section>
     </main>
 
-    <script src="./pilot-rest-v1-break-overrides-app.js?v=20260822-7" defer></script>
+    <script src="./pilot-rest-v1-break-overrides-app.js?v=20260822-8" defer></script>
   </body>
 </html>
